@@ -56,7 +56,7 @@ export default async function PurchasesPage() {
                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{(dict.Purchases as any).supplier}</label>
                      <select name="supplierId" required className="flex h-12 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-2 text-sm font-medium transition-all focus-visible:outline-none focus:ring-2 focus:ring-blue-500">
                        <option value="">Select an Approved Vendor...</option>
-                       {suppliers.map(s => <option key={s.id} value={s.id}>{s.name} (VAT: {s.vatNumber})</option>)}
+                       {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name} (VAT: {s.vatNumber})</option>)}
                      </select>
                    </div>
 
@@ -64,7 +64,7 @@ export default async function PurchasesPage() {
                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{(dict.Purchases as any).select_tank}</label>
                      <select name="tankId" required className="flex h-12 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-2 text-sm font-medium transition-all focus-visible:outline-none focus:ring-2 focus:ring-blue-500">
                        <option value="">Choose Storage Destination...</option>
-                       {tanks.map(t => (
+                       {tanks.map((t: any) => (
                          <option key={t.id} value={t.id}>
                            {t.name} - {t.fuelType.name} | Space Limit: {(t.capacity - t.currentVolume).toLocaleString()}L
                          </option>
@@ -122,7 +122,7 @@ export default async function PurchasesPage() {
                    <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-6">
                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Vendor Directory</h3>
                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
-                       {suppliers.map(s => <VendorRow key={s.id} supplier={s} />)}
+                       {suppliers.map((s: any) => <VendorRow key={s.id} supplier={s} />)}
                      </div>
                    </div>
                  )}
@@ -143,7 +143,7 @@ export default async function PurchasesPage() {
                      </div>
                    )}
                    
-                   {recentPurchases.map(p => (
+                   {recentPurchases.map((p: any) => (
                      <div key={p.id} className="flex justify-between items-center p-4 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
                         <div>
                           <p className="font-bold dark:text-white flex items-center gap-2">

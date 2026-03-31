@@ -15,7 +15,7 @@ export default function PosClient({ tanks }: { tanks: any[] }) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [message, setMessage] = useState("")
 
-  const activeTank = tanks.find(t => t.id === selectedTank)
+  const activeTank = tanks.find((t: any) => t.id === selectedTank)
   const pricePerLiter = activeTank?.fuelType.pricePerLiter || 0
   const quantity = parseFloat(liters) || 0
   
@@ -53,7 +53,7 @@ export default function PosClient({ tanks }: { tanks: any[] }) {
             <div className="space-y-3">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t("select_fuel")}</label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {tanks.map(tank => (
+                {tanks.map((tank: any) => (
                   <label key={tank.id} className={`cursor-pointer rounded-2xl p-4 flex flex-col justify-center items-center text-center transition-all border-2 ${selectedTank === tank.id ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-100 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 bg-white dark:bg-slate-950'}`}>
                     <input type="radio" name="tankId" value={tank.id} className="hidden" checked={selectedTank === tank.id} onChange={(e) => setSelectedTank(e.target.value)} />
                     <span className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-wider">{tank.name}</span>
