@@ -29,8 +29,8 @@ export default async function DashboardPage() {
   const salesAmount = totalSales._sum.totalAmount || 0
   
   const accountsData = await prisma.account.findMany({ include: { transactions: true } })
-  const assets = accountsData.filter(a => a.type === "ASSET").reduce((sum, a) => sum + a.transactions.reduce((s, t) => s + t.debit - t.credit, 0), 0)
-  const liabilities = accountsData.filter(a => a.type === "LIABILITY").reduce((sum, a) => sum + a.transactions.reduce((s, t) => s + t.credit - t.debit, 0), 0)
+  const assets = accountsData.filter((a: any) => a.type === "ASSET").reduce((sum: number, a: any) => sum + a.transactions.reduce((s: number, t: any) => s + t.debit - t.credit, 0), 0)
+  const liabilities = accountsData.filter((a: any) => a.type === "LIABILITY").reduce((sum: number, a: any) => sum + a.transactions.reduce((s: number, t: any) => s + t.credit - t.debit, 0), 0)
   const estimatedZakat = (assets - liabilities) * 0.025
 
   return (
@@ -74,7 +74,7 @@ export default async function DashboardPage() {
              <CardContent>
                <span className="text-3xl font-black text-slate-900 dark:text-white">{tanks.length} {tanks.length === 1 ? 'Tank' : 'Tanks'}</span>
                <div className="flex mt-3 gap-1">
-                 {tanks.map(t => (
+                 {tanks.map((t: any) => (
                     <div key={t.id} className="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
                        <div className="h-full bg-blue-500" style={{ width: `${(t.currentVolume / t.capacity) * 100}%`}} />
                     </div>
@@ -114,7 +114,7 @@ export default async function DashboardPage() {
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                     {sales.map(s => (
+                     {sales.map((s: any) => (
                        <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer">
                          <td className="p-4 text-slate-500 dark:text-slate-400 font-mono text-xs">{new Date(s.createdAt).toLocaleTimeString()}</td>
                          <td className="p-4 font-bold text-slate-900 dark:text-white">{s.invoiceNumber}</td>
@@ -138,7 +138,7 @@ export default async function DashboardPage() {
               <CardTitle>Hardware Status</CardTitle>
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
-               {tanks.map(tank => {
+               {tanks.map((tank: any) => {
                  const percentage = (tank.currentVolume / tank.capacity) * 100
                  return (
                    <div key={tank.id}>
