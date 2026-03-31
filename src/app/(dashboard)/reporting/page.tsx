@@ -23,26 +23,26 @@ export default async function ReportingPage() {
     include: { transactions: true }
   })
 
-  const accounts = accountsData.map(account => {
-    const totalDebit = account.transactions.reduce((sum, t) => sum + t.debit, 0)
-    const totalCredit = account.transactions.reduce((sum, t) => sum + t.credit, 0)
+  const accounts = accountsData.map((account: any) => {
+    const totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
+    const totalCredit = account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
     const balance = calcBalance(account.type, totalDebit, totalCredit)
     return { ...account, balance }
   })
 
-  const revenues = accounts.filter(a => a.type === "REVENUE")
-  const expenses = accounts.filter(a => a.type === "EXPENSE")
-  const totalRevenue = revenues.reduce((s, a) => s + a.balance, 0)
-  const totalExpense = expenses.reduce((s, a) => s + a.balance, 0)
+  const revenues = accounts.filter((a: any) => a.type === "REVENUE")
+  const expenses = accounts.filter((a: any) => a.type === "EXPENSE")
+  const totalRevenue = revenues.reduce((s: number, a: any) => s + a.balance, 0)
+  const totalExpense = expenses.reduce((s: number, a: any) => s + a.balance, 0)
   const netIncome = totalRevenue - totalExpense
 
-  const assets = accounts.filter(a => a.type === "ASSET")
-  const liabilities = accounts.filter(a => a.type === "LIABILITY")
-  const equities = accounts.filter(a => a.type === "EQUITY")
+  const assets = accounts.filter((a: any) => a.type === "ASSET")
+  const liabilities = accounts.filter((a: any) => a.type === "LIABILITY")
+  const equities = accounts.filter((a: any) => a.type === "EQUITY")
   
-  const totalAssets = assets.reduce((s, a) => s + a.balance, 0)
-  const totalLiabilities = liabilities.reduce((s, a) => s + a.balance, 0)
-  const totalEquity = equities.reduce((s, a) => s + a.balance, 0)
+  const totalAssets = assets.reduce((s: number, a: any) => s + a.balance, 0)
+  const totalLiabilities = liabilities.reduce((s: number, a: any) => s + a.balance, 0)
+  const totalEquity = equities.reduce((s: number, a: any) => s + a.balance, 0)
 
   const zakatBase = totalAssets - totalLiabilities
   const zakatOwed = zakatBase > 0 ? zakatBase * 0.025 : 0
@@ -77,7 +77,7 @@ export default async function ReportingPage() {
                <div>
                  <h3 className="font-bold text-slate-400 uppercase tracking-widest mb-4 border-b border-dashed border-slate-200 dark:border-slate-800 pb-2 text-[10px]">{(dict.Reporting as any).revenue}</h3>
                  <div className="space-y-2 font-mono">
-                   {revenues.map(r => (
+                   {revenues.map((r: any) => (
                      <div key={r.id} className="flex justify-between text-slate-700 dark:text-slate-300">
                        <span className="font-sans font-bold">{r.name}</span>
                        <span>SAR {r.balance.toLocaleString()}</span>
@@ -94,7 +94,7 @@ export default async function ReportingPage() {
                <div>
                  <h3 className="font-bold text-slate-400 uppercase tracking-widest mb-4 border-b border-dashed border-slate-200 dark:border-slate-800 pb-2 text-[10px]">{(dict.Reporting as any).expenses}</h3>
                  <div className="space-y-2 font-mono">
-                   {expenses.map(e => (
+                   {expenses.map((e: any) => (
                      <div key={e.id} className="flex justify-between text-slate-700 dark:text-slate-300">
                        <span className="font-sans font-bold">{e.name}</span>
                        <span>SAR {e.balance.toLocaleString()}</span>
@@ -127,7 +127,7 @@ export default async function ReportingPage() {
                <div>
                  <h3 className="font-bold text-slate-400 uppercase tracking-widest mb-4 border-b border-dashed border-slate-200 dark:border-slate-800 pb-2 text-[10px]">{(dict.Reporting as any).assets}</h3>
                  <div className="space-y-2 font-mono">
-                   {assets.map(a => (
+                   {assets.map((a: any) => (
                      <div key={a.id} className="flex justify-between text-slate-700 dark:text-slate-300">
                        <span className="font-sans font-bold">{a.name}</span>
                        <span>SAR {a.balance.toLocaleString()}</span>
@@ -144,13 +144,13 @@ export default async function ReportingPage() {
                <div>
                  <h3 className="font-bold text-slate-400 uppercase tracking-widest mb-4 border-b border-dashed border-slate-200 dark:border-slate-800 pb-2 text-[10px]">{(dict.Reporting as any).liabilities}</h3>
                  <div className="space-y-2 font-mono">
-                   {liabilities.map(l => (
+                   {liabilities.map((l: any) => (
                      <div key={l.id} className="flex justify-between text-slate-700 dark:text-slate-300">
                        <span className="font-sans font-bold">{l.name}</span>
                        <span>SAR {l.balance.toLocaleString()}</span>
                      </div>
                    ))}
-                   {equities.map(e => (
+                   {equities.map((e: any) => (
                      <div key={e.id} className="flex justify-between text-slate-700 dark:text-slate-300">
                        <span className="font-sans font-bold">{e.name}</span>
                        <span>SAR {e.balance.toLocaleString()}</span>
