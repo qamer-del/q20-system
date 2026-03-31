@@ -83,7 +83,7 @@ export default async function AuditPage() {
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm font-medium">
-                   {logs.map((log) => (
+                   {logs.map((log: any) => (
                      <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors">
                        <td className="p-6 font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-bold">
                          {new Date(log.createdAt).toLocaleString()}

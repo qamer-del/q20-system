@@ -37,7 +37,7 @@ export default async function UsersPage() {
                </CardHeader>
                <CardContent>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {users.map(user => (
+                    {users.map((user: any) => (
                        <div key={user.id} className="border border-slate-100 dark:border-slate-800 p-5 rounded-2xl flex justify-between items-center bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-shadow">
                          <div>
                            <h3 className="font-bold text-slate-900 dark:text-white capitalize">{user.name || "Station User"}</h3>
