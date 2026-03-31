@@ -10,7 +10,7 @@ export async function loginAction(formData: FormData) {
       password: formData.get("password"),
       redirectTo: "/dashboard",
     })
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof AuthError) {
       switch (error.type) {
         case "CredentialsSignin":

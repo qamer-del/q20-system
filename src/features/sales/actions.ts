@@ -28,7 +28,7 @@ export async function processSale(formData: FormData) {
   // ==========================================
   // CORE POS TRANSACTION ENGINE
   // ==========================================
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     // 1. Validate Inventory
     const tank = await tx.tank.findUnique({ where: { id: tankId }, include: { fuelType: true } })
     if (!tank) throw new Error("Tank not found")

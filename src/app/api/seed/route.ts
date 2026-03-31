@@ -21,7 +21,7 @@ export async function GET() {
       message: "Database seeded successfully!", 
       user: { email: admin.email, role: admin.role, password: "password123" } 
     })
-  } catch (error) {
+  } catch (error: any) {
     return NextResponse.json({ error: "Failed to seed database" }, { status: 500 })
   }
 }
