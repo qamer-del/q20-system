@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/auth"
-import { AccountType } from "@prisma/client"
+
 
 // ------------------------------------
 // 1. Create a Custom Ledger Account
@@ -17,7 +17,7 @@ export async function addAccount(formData: FormData) {
     data: {
       code: formData.get("code") as string,
       name: formData.get("name") as string,
-      type: formData.get("type") as AccountType,
+      type: formData.get("type") as any,
     }
   })
   
