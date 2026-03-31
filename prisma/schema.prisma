@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// Identity & Access Management (IAM)
+// ==========================================
+enum Role {
+  ADMIN
+  ACCOUNTANT
+  CASHIER
+  VIEWER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  password      String?
+  role          Role      @default(VIEWER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sales         Sale[]
+  activityLogs  ActivityLog[]
+}
+
+// ==========================================
+// Inventory Management (Tanks & Fuel)
+// ==========================================
+model FuelType {
+  id            String    @id @default(cuid())
+  name          String    // e.g., "Super 98", "Diesel"
+  code          String    @unique // e.g., "S98", "DSL"
+  pricePerLiter Float
+  
+  tanks         Tank[]
+  salesItems    SaleItem[]
+  purchases     Purchase[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Tank {
+  id            String    @id @default(cuid())
+  name          String    // e.g., "Tank 1 - Super 98"
+  capacity      Float     // Total capacity in Liters
+  currentVolume Float     // Current Liters available
+  
+  fuelTypeId    String
+  fuelType      FuelType  @relation(fields: [fuelTypeId], references: [id])
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ==========================================
+// Sales & Point of Sale (POS)
+// ==========================================
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  MADA
+}
+
+model Sale {
+  id            String    @id @default(cuid())
+  invoiceNumber String    @unique // e.g., INV-10001
+  totalAmount   Float
+  vatAmount     Float     // standard 15% ZATCA
+  netAmount     Float
+  paymentMethod PaymentMethod
+  
+  userId        String    // Cashier who made the sale
+  user          User      @relation(fields: [userId], references: [id])
+  items         SaleItem[]
+  
+  // ZATCA specific fields (Phase 2)
+  zatcaQrCode   String?   @db.Text
+  zatcaHash     String?
+  
+  // Accounting Link - A sale maps exactly to ONE journal entry
+  journalEntryId String?  @unique
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt     DateTime  @default(now())
+}
+
+model SaleItem {
+  id            String    @id @default(cuid())
+  saleId        String
+  sale          Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  
+  fuelTypeId    String
+  fuelType      FuelType  @relation(fields: [fuelTypeId], references: [id])
+  
+  quantity      Float     // Liters sold
+  unitPrice     Float
+  totalPrice    Float
+}
+
+// ==========================================
+// Purchases & Suppliers
+// ==========================================
+model Supplier {
+  id            String    @id @default(cuid())
+  name          String
+  vatNumber     String?
+  contactInfo   String?
+  purchases     Purchase[]
+  createdAt     DateTime  @default(now())
+}
+
+model Purchase {
+  id            String    @id @default(cuid())
+  invoiceNumber String
+  
+  supplierId    String
+  supplier      Supplier  @relation(fields: [supplierId], references: [id])
+  
+  fuelTypeId    String
+  fuelType      FuelType  @relation(fields: [fuelTypeId], references: [id])
+  
+  quantity      Float     // Liters purchased
+  unitPrice     Float
+  totalAmount   Float
+  
+  // Accounting Link
+  journalEntryId String?  @unique
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt     DateTime  @default(now())
+}
+
+// ==========================================
+// Accounting System (Double-Entry Ledger)
+// ==========================================
+enum AccountType {
+  ASSET       // e.g., Cash, Bank, Inventory
+  LIABILITY   // e.g., VAT Payable, Accounts Payable
+  EQUITY      // e.g., Retained Earnings
+  REVENUE     // e.g., Sales Revenue
+  EXPENSE     // e.g., Cost of Goods Sold, Salaries
+}
+
+// Chart of Accounts (e.g., "1001 Cash", "4001 Sales")
+model Account {
+  id            String    @id @default(cuid())
+  code          String    @unique // e.g., "1001"
+  name          String
+  type          AccountType
+  
+  transactions  LedgerTransaction[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// A single business event (e.g., "Sale of Fuel")
+model JournalEntry {
+  id            String    @id @default(cuid())
+  description   String
+  date          DateTime  @default(now())
+  
+  transactions  LedgerTransaction[]
+  
+  // One-to-one relations back to source documents
+  sale          Sale?
+  purchase      Purchase?
+}
+
+// Individual Debits and Credits
+model LedgerTransaction {
+  id              String      @id @default(cuid())
+  journalEntryId  String
+  journalEntry    JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  
+  accountId       String
+  account         Account     @relation(fields: [accountId], references: [id])
+  
+  debit           Float       @default(0) // Left side of ledger
+  credit          Float       @default(0) // Right side of ledger
+  
+  createdAt       DateTime    @default(now())
+}
+
+// ==========================================
+// Audit & Activity Logs
+// ==========================================
+model ActivityLog {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  action        String    // e.g., "MODIFIED_TANK", "DELETED_SALE"
+  details       String?   @db.Text
+  createdAt     DateTime  @default(now())
+}
