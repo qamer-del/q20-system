@@ -30,7 +30,7 @@ export default async function PurchasesPage() {
       <div className="max-w-7xl mx-auto space-y-10">
         
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-black text-slate-900 dark:text-white flex items-center gap-4 tracking-tight">
+          <h1 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white flex items-center gap-4 tracking-tight glass-title shadow-sm">
              <div className="p-3 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-2xl">
                <Truck className="w-8 h-8" />
              </div>

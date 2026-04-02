@@ -39,7 +39,7 @@ export default async function AuditPage() {
           </div>
           
           <CardHeader className="relative z-10 pb-4">
-            <CardTitle className="text-4xl font-black flex items-center gap-4">
+            <CardTitle className="text-3xl md:text-5xl font-black flex items-center gap-4 glass-title">
               <ShieldAlert className="text-rose-500 w-10 h-10" />
               {(dict.Audit as any).title}
             </CardTitle>

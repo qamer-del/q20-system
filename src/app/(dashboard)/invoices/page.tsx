@@ -16,7 +16,7 @@ export default async function InvoicesPage() {
       <div className="max-w-7xl mx-auto space-y-8">
         
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-black text-slate-900 dark:text-white flex items-center gap-4 tracking-tight">
+          <h1 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white flex items-center gap-4 tracking-tight glass-title shadow-sm">
              <div className="p-3 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-2xl">
                <QrCode className="w-8 h-8" />
              </div>

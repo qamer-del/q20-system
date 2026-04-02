@@ -19,7 +19,7 @@ export default async function UsersPage() {
       <div className="max-w-7xl mx-auto space-y-8">
         
         <div className="flex justify-between items-center mb-10">
-          <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-4">
+          <h1 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white flex items-center gap-4 tracking-tight glass-title shadow-sm">
              <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl">
                <Users className="w-8 h-8" />
              </div>

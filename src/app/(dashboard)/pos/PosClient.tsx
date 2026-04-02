@@ -46,7 +46,7 @@ export default function PosClient({ tanks }: { tanks: any[] }) {
       {/* PUMP SELECTION AND KEYPAD */}
       <Card className="flex-1 shadow-xl border-t-8 border-t-blue-600">
         <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800 pb-6 mb-6">
-          <CardTitle className="text-2xl font-black">{t("title")}</CardTitle>
+          <CardTitle className="text-2xl md:text-4xl font-black glass-title">{t("title")}</CardTitle>
         </CardHeader>
         <CardContent>
           <form action={handleSale} className="space-y-8">

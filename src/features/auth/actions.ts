@@ -1,6 +1,6 @@
 "use server"
 
-import { signIn } from "@/auth"
+import { signIn, signOut } from "@/auth"
 import { AuthError } from "next-auth"
 
 export async function loginAction(formData: FormData) {
@@ -21,4 +21,8 @@ export async function loginAction(formData: FormData) {
     }
     throw error
   }
+}
+
+export async function logoutAction() {
+  await signOut({ redirectTo: "/login" })
 }

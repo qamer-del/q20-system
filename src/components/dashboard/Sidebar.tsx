@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import SettingsToggle from "@/components/SettingsToggle"
 import { useI18n } from "@/components/I18nProvider"
-import { signOut } from "next-auth/react"
+import { logoutAction } from "@/features/auth/actions"
 
 export default function Sidebar({ mobile, role = "VIEWER" }: { mobile?: boolean; role?: string } = {}) {
   const pathname = usePathname()
@@ -94,13 +94,15 @@ export default function Sidebar({ mobile, role = "VIEWER" }: { mobile?: boolean;
       
       <div className="mt-auto border-t border-slate-800 bg-slate-900/80 backdrop-blur-md p-4">
         <SettingsToggle />
-        <button 
-          onClick={() => signOut()} 
-          className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 border border-transparent hover:border-rose-900/50"
-        >
-          <LogOut className="w-4 h-4" />
-          {t("logout")}
-        </button>
+        <form action={logoutAction} className="w-full mt-2">
+          <button 
+            type="submit"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 border border-transparent hover:border-rose-900/50"
+          >
+            <LogOut className="w-4 h-4" />
+            {t("logout")}
+          </button>
+        </form>
       </div>
     </aside>
   )
