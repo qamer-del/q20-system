@@ -156,17 +156,17 @@ export default function ResetClient() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
-            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+            <p dir="ltr" className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed text-center md:text-left">
               {currentConfig.description}
             </p>
             <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
-              <p className="text-rose-600 dark:text-rose-400 font-bold text-sm">
-                This action CANNOT be undone. All affected data will be permanently removed from the database.
+              <p dir="ltr" className="text-rose-600 dark:text-rose-400 font-bold text-sm text-center">
+                This action CANNOT be undone.<br/>All affected data will be permanently removed from the database.
               </p>
             </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={cancel} className="flex-1">Cancel</Button>
-              <Button onClick={() => setStep(2)} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white">
+            <div className="flex flex-col-reverse md:flex-row gap-3">
+              <Button variant="outline" onClick={cancel} className="flex-1 whitespace-nowrap">Cancel</Button>
+              <Button onClick={() => setStep(2)} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white whitespace-nowrap overflow-hidden text-ellipsis">
                 I Understand, Continue
               </Button>
             </div>
@@ -222,7 +222,7 @@ export default function ResetClient() {
               />
             </div>
 
-            <div className="flex gap-3 pt-4">
+            <div className="flex flex-col-reverse md:flex-row gap-3 pt-4">
               <Button variant="outline" onClick={cancel} className="flex-1">Cancel</Button>
               <Button
                 onClick={handleReset}
