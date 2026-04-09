@@ -38,22 +38,37 @@ export function OpenShiftForms({ pumps }: { pumps: any[] }) {
                 <p className="font-bold text-xs uppercase tracking-widest text-slate-400 mt-2">{pump.tank.fuelType.name}</p>
 
                 {/* Input for Mobile-friendly / Manual Start */}
-                <div className="mt-6 space-y-2 relative z-20">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block">Starting Meter (Liters)</label>
-                  <Input
-                    type="number"
-                    name="openingMeter"
-                    required
-                    step="0.01"
-                    placeholder={pump.meterReading.toString()}
-                    defaultValue={pump.meterReading.toString()}
-                    className="font-mono font-bold text-base bg-slate-50"
-                    disabled={pump.status !== "ACTIVE"}
-                    onClick={(e) => e.stopPropagation()} /* Prevents any native event bubbling overriding touches */
-                    onTouchStart={(e) => e.stopPropagation()}
-                  />
+                <div className="mt-6 space-y-4 relative z-20">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block">Starting Meter (Liters)</label>
+                    <Input
+                      type="number"
+                      name="openingMeter"
+                      required
+                      step="0.01"
+                      placeholder={pump.meterReading.toString()}
+                      defaultValue={pump.meterReading.toString()}
+                      className="font-mono font-bold text-base bg-slate-50"
+                      disabled={pump.status !== "ACTIVE"}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold tracking-widest text-slate-500 block">Opening Cash (SAR)</label>
+                    <Input
+                      type="number"
+                      name="openingCash"
+                      required
+                      step="0.01"
+                      placeholder="500.00"
+                      defaultValue="0.00"
+                      className="font-mono font-bold text-base bg-slate-50"
+                      disabled={pump.status !== "ACTIVE"}
+                    />
+                  </div>
+
                   <SubmitButton
-                    className="w-full mt-2 font-bold uppercase tracking-widest"
+                    className="w-full mt-2 font-bold uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 h-12 rounded-xl"
                     disabled={pump.status !== "ACTIVE"}
                   >
                     Start Shift
@@ -115,23 +130,39 @@ export function CloseShiftForm({
       </CardHeader>
 
       <CardContent className="pt-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-slate-50 dark:bg-slate-900/40 p-6 rounded-2xl border-2 border-slate-100 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-2">Opening Meter</span>
-            <span className="font-mono text-3xl font-black text-slate-700 dark:text-slate-300">
-              {activeShift.openingMeter.toLocaleString()} L
-            </span>
+            <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-2">Opening Status</span>
+            <div className="space-y-1">
+              <p className="font-mono text-xl font-black text-slate-700 dark:text-slate-300">
+                {activeShift.openingMeter.toLocaleString()} L
+              </p>
+              <p className="text-xs font-bold text-slate-400 tracking-tight">Starting Cash: SAR {activeShift.openingCash?.toLocaleString()}</p>
+            </div>
           </div>
+
           <div className="bg-slate-50 dark:bg-slate-900/40 p-6 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 relative">
             <span className="text-[10px] uppercase font-bold tracking-widest text-blue-500 mb-2 flex items-center gap-2">
-              <TrendingDown className="w-3 h-3" /> System Expected Closing Meter
+              <Fuel className="w-3 h-3" /> System Expected Closure
             </span>
-            <span className="font-mono text-3xl font-black text-blue-600 dark:text-blue-400 block">
+            <span className="font-mono text-2xl font-black text-blue-600 dark:text-blue-400 block tracking-tight">
               {(activeShift.openingMeter + activeShift.expectedLiters).toLocaleString()} L
             </span>
-            <span className="text-xs font-bold text-slate-400 mt-2 block">
-              Based on {activeShift.expectedLiters.toLocaleString()}L tracked recorded sales.
+            <span className="text-[10px] font-bold text-slate-400 mt-2 block uppercase">
+              Throughput: {activeShift.expectedLiters.toLocaleString()}L
             </span>
+          </div>
+
+          <div className="bg-indigo-50 dark:bg-indigo-900/10 p-6 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900/30">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-indigo-500 mb-2 block">Expected Collections</span>
+            <div className="space-y-1">
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300 flex justify-between">
+                Cash: <span>SAR {activeShift.sales.filter((s: any) => s.paymentMethod === 'CASH').reduce((sum: number, s: any) => sum + s.totalAmount, 0).toLocaleString()}</span>
+              </p>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300 flex justify-between">
+                Bank: <span>SAR {activeShift.sales.filter((s: any) => s.paymentMethod === 'BANK').reduce((sum: number, s: any) => sum + s.totalAmount, 0).toLocaleString()}</span>
+              </p>
+            </div>
           </div>
         </div>
 
@@ -185,7 +216,7 @@ export function CloseShiftForm({
             </div>
           </div>
 
-          <SubmitButton variant={isOverride ? 'secondary' : 'destructive'} className="w-full h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg">
+          <SubmitButton variant={isOverride ? 'secondary' : 'default'} className={`w-full h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg ${!isOverride && 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
             {isOverride ? 'Finalize External Shift' : 'Submit & Close My Shift'}
           </SubmitButton>
         </ActionForm>

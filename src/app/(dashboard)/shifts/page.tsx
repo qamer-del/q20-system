@@ -33,6 +33,7 @@ export default async function ShiftsPage() {
     },
     include: {
       user: true,
+      sales: true,
       pump: { include: { tank: { include: { fuelType: true } } } }
     }
   })
@@ -46,7 +47,7 @@ export default async function ShiftsPage() {
 
   const closedShifts = await prisma.shift.findMany({
     where: historyQuery,
-    include: { pump: true, user: true },
+    include: { pump: true, user: true, sales: true },
     orderBy: { closedAt: "desc" },
     take: 20
   })
@@ -62,13 +63,6 @@ export default async function ShiftsPage() {
             </div>
             Shift Control
           </h1>
-
-          {/* TEMP DIAGNOSTIC - Remove after fix */}
-          <div className="bg-amber-100 p-4 rounded-xl text-[10px] font-mono border border-amber-300">
-            DEBUG | UserID: {userId} | Role: {role} | MyActiveCount: {activeShifts.length}
-            <br />
-            Global Open Shifts (User[ID]): {(await prisma.shift.findMany({ where: { status: 'OPEN' }, include: { user: true } })).map(s => `${s.user.name}[${s.userId}]`).join(', ')}
-          </div>
 
           {role !== "CASHIER" && (
             <span className="bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/20 border border-fuchsia-200 dark:border-fuchsia-900/50 text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-full shadow-sm">
@@ -132,15 +126,18 @@ export default async function ShiftsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                   {closedShifts.map((s: any) => {
-                    const discrepancy = (s.actualLiters || 0) - s.expectedLiters
-                    const isPerfect = Math.abs(discrepancy) < 0.5
+                    const discrepancy = roundLiters((s.actualLiters || 0) - s.expectedLiters)
+                    const isPerfect = Math.abs(discrepancy) < 0.1
+                    const totalSales = s.sales?.reduce((sum: number, sale: any) => sum + sale.totalAmount, 0) || 0
+                    const cVar = s.cashVariance || 0
+                    const bVar = s.bankVariance || 0
 
                     return (
-                      <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors">
+                      <tr key={s.id} className="border-b dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
                         <td className="p-6">
                           <p className="font-black text-slate-900 dark:text-white capitalize text-base">{s.user.name}</p>
                           <p className="text-[10px] font-mono text-slate-500 mt-1">
-                            {s.openedAt.toLocaleDateString()} {s.openedAt.toLocaleTimeString()} &rarr; {s.closedAt?.toLocaleTimeString()}
+                            {s.openedAt.toLocaleDateString()} {s.openedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} &rarr; {s.closedAt?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </td>
                         <td className="p-6">
@@ -148,19 +145,31 @@ export default async function ShiftsPage() {
                           <p className="text-xs font-mono mt-1 text-slate-400">{s.openingMeter}L &rarr; {s.closingMeter}L</p>
                         </td>
                         <td className="p-6">
-                          <p className="font-black text-blue-600 dark:text-blue-400 text-lg">{s.actualLiters?.toLocaleString()}L</p>
-                          {isPerfect ? (
-                            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">✓ Match</span>
-                          ) : (
-                            <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" /> Discrepancy: {discrepancy > 0 ? '+' : ''}{roundLiters(discrepancy)}L
-                            </span>
-                          )}
+                          <div className="flex flex-col">
+                            <span className="text-lg font-black text-slate-800 dark:text-slate-200">{s.actualLiters?.toLocaleString()} L</span>
+                            {isPerfect ? (
+                              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-1 mt-1">
+                                ✓ Exact Match
+                              </span>
+                            ) : (
+                              <span className={`text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 mt-1 ${discrepancy > 0 ? 'text-blue-500' : 'text-rose-500'}`}>
+                                <AlertTriangle className="w-3 h-3" /> {discrepancy > 0 ? '+' : ''}{discrepancy} L Variance
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-6">
                           <div className="space-y-1">
-                            <p className="font-bold text-slate-700 dark:text-slate-300">Cash: <span className="font-mono">SAR {(s.actualCash || 0).toLocaleString()}</span></p>
-                            <p className="font-bold text-slate-700 dark:text-slate-300">Bank: <span className="font-mono">SAR {(s.actualBank || 0).toLocaleString()}</span></p>
+                            <div className="flex justify-between items-center gap-4">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Sales</span>
+                              <span className="font-mono font-black text-slate-700 dark:text-slate-300">SAR {totalSales.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center gap-4">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cash Var</span>
+                              <span className={`font-mono font-bold text-xs ${cVar === 0 ? 'text-slate-400' : cVar > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                {cVar === 0 ? 'Balanced' : `${cVar > 0 ? '+' : ''}${cVar.toLocaleString()}`}
+                              </span>
+                            </div>
                           </div>
                         </td>
                       </tr>

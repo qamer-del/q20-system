@@ -109,8 +109,13 @@ model Shift {
   actualLiters    Float?      
 
   // Financial Reconciliation
+  openingCash     Float       @default(0)
+  expectedCash    Float       @default(0)
+  expectedBank    Float       @default(0)
   actualCash      Float?      
   actualBank      Float?      
+  cashVariance    Float?      
+  bankVariance    Float?      
 
   sales           Sale[]
 

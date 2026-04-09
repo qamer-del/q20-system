@@ -42,9 +42,12 @@ export async function openShift(formData: FormData) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
 
-  const userId = (session as any).user.id
+  const userId = (session?.user as any)?.id
   const pumpId = formData.get("pumpId") as string
+  const openingCash = parseFloat(formData.get("openingCash") as string) || 0
+
   if (!pumpId) return { error: "Please select a pump" }
+  if (isNaN(openingCash) || openingCash < 0) return { error: "Please enter valid starting cash." }
 
   const openingMeterStr = formData.get("openingMeter") as string
   const openingMeter = parseFloat(openingMeterStr)
@@ -83,6 +86,7 @@ export async function openShift(formData: FormData) {
         userId,
         pumpId: pump.id,
         openingMeter,
+        openingCash,
         expectedLiters: 0,
         status: "OPEN"
       }
@@ -99,7 +103,7 @@ export async function openShift(formData: FormData) {
       data: {
         userId,
         action: "SHIFT_OPENED",
-        details: `Started shift on ${pump.name} at meter ${openingMeter}L`
+        details: `Started shift on ${pump.name} at meter ${openingMeter}L with SAR ${openingCash} opening cash.`
       }
     })
   })
@@ -112,66 +116,90 @@ export async function closeShift(formData: FormData) {
   const session = await auth()
   if (!session?.user) return { error: "Unauthorized" }
 
-  const currentUserId = (session as any).user.id
-  // @ts-ignore
-  const role = session.user.role
+  const currentUserId = (session?.user as any)?.id
+  const role = (session?.user as any)?.role
   const shiftId = formData.get("shiftId") as string
 
   const physicalClosingMeter = parseFloat(formData.get("closingMeter") as string)
   const actualCash = parseFloat(formData.get("actualCash") as string) || 0
   const actualBank = parseFloat(formData.get("actualBank") as string) || 0
 
-  if (isNaN(physicalClosingMeter)) return { error: "Invalid meter reading" }
+  if (isNaN(physicalClosingMeter)) return { error: "Invalid meter reading." }
 
   const shift = await prisma.shift.findUnique({
     where: { id: shiftId },
-    include: { pump: true, user: true }
+    include: {
+      pump: true,
+      user: true,
+      sales: true
+    }
   })
 
-  if (!shift || shift.status !== "OPEN") return { error: "Active shift not found" }
+  if (!shift || shift.status !== "OPEN") return { error: "Active shift not found." }
 
-  // 1. Authorization: Only Owner OR Admin/Manager can close
-  if (shift.userId !== currentUserId && role === "CASHIER") {
+  // Check visibility/auth
+  const isOwner = String(shift.userId) === String(currentUserId)
+  const isAuthorizedFull = role === 'ADMIN' || role === 'MANAGER'
+  if (!isOwner && !isAuthorizedFull) {
     return { error: "Unauthorized: You can only close your own active shifts." }
   }
 
-  // 2. Validation: Meter sequence
+  // 1. Sequence Check
   const actualLiters = physicalClosingMeter - shift.openingMeter
   if (actualLiters < 0) {
     return { error: `Closing meter cannot be lower than opening meter (${shift.openingMeter}L).` }
   }
 
+  // 2. Automated Financial Totals
+  const expectedCash = shift.sales
+    .filter(s => s.paymentMethod === 'CASH')
+    .reduce((sum, s) => sum + s.totalAmount, 0)
+
+  const expectedBank = shift.sales
+    .filter(s => s.paymentMethod === 'BANK')
+    .reduce((sum, s) => sum + s.totalAmount, 0)
+
+  const cashVariance = actualCash - expectedCash
+  const bankVariance = actualBank - expectedBank
+
   await prisma.$transaction(async (tx: any) => {
-    // 1. Close the shift with financial summary
+    // 1. Close & Record Detailed Reconciliation
     await tx.shift.update({
       where: { id: shift.id },
       data: {
         status: "CLOSED",
         closingMeter: physicalClosingMeter,
         actualLiters,
+        expectedCash,
+        expectedBank,
         actualCash,
         actualBank,
+        cashVariance,
+        bankVariance,
         closedAt: new Date(),
       }
     })
 
-    // 2. Update Pump's master lifetime meter
+    // 2. Update Pump lifetime meter
     await tx.pump.update({
       where: { id: shift.pumpId },
       data: { meterReading: physicalClosingMeter }
     })
 
-    // 3. Log it (Note if it was an override)
-    const isOverride = shift.userId !== currentUserId
+    // 3. Detailed Audit Trail
+    const isOverride = !isOwner
     await tx.activityLog.create({
       data: {
         userId: currentUserId,
         action: "SHIFT_CLOSED",
-        details: `${isOverride ? "[OVERRIDE] " : ""}Closed shift for ${shift.user.name} on ${shift.pump.name}. Expected: ${shift.expectedLiters}L. Actual: ${actualLiters}L. Cash Reconciliation: SAR ${actualCash}. Bank: SAR ${actualBank}.`
+        details: `${isOverride ? "[OVERRIDE] " : ""}Closed shift for ${shift.user.name} on ${shift.pump.name}. 
+          Liter Reconciliation: Expected ${shift.expectedLiters}L, Actual ${actualLiters}L.
+          Financial Reconciliation: Cash Var: SAR ${cashVariance}, Bank Var: SAR ${bankVariance}.`
       }
     })
   })
 
   revalidatePath("/shifts")
+  revalidatePath("/dashboard")
   return { success: true }
 }
