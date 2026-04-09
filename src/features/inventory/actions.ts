@@ -3,23 +3,42 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/auth"
+import { roundSAR } from "@/lib/financial"
 
 // ------------------------------------
-// 1. Create a new Fuel Type (e.g., Diesel)
+// 1. Create a new Fuel Type
 // ------------------------------------
 export async function addFuelType(formData: FormData) {
   const session = await auth()
   // @ts-ignore
-  if (session?.user?.role !== "ADMIN") throw new Error("Unauthorized")
+  if (session?.user?.role !== "ADMIN") throw new Error("Unauthorized: Only Admin can add fuel types.")
+
+  const name = (formData.get("name") as string)?.trim()
+  const code = (formData.get("code") as string)?.trim()
+  const priceStr = formData.get("price") as string
+
+  if (!name || name.length < 2) throw new Error("Fuel type name is required.")
+  if (!code || code.length < 2) throw new Error("Fuel code is required.")
+
+  const price = parseFloat(priceStr)
+  if (isNaN(price) || price <= 0) throw new Error("Price must be a positive number.")
+
+  // Check duplicate code
+  const existing = await prisma.fuelType.findUnique({ where: { code } })
+  if (existing) throw new Error(`Fuel code "${code}" already exists.`)
 
   await prisma.fuelType.create({
+    data: { name, code, pricePerLiter: roundSAR(price) }
+  })
+
+  await prisma.activityLog.create({
     data: {
-      name: formData.get("name") as string,
-      code: formData.get("code") as string,
-      pricePerLiter: parseFloat(formData.get("price") as string),
+      userId: (session as any).user.id,
+      action: "FUEL_TYPE_ADDED",
+      details: `Added fuel type: ${name} (${code}) — SAR ${price}/L`
     }
   })
-  
+
   revalidatePath("/inventory")
 }
 
@@ -29,14 +48,30 @@ export async function addFuelType(formData: FormData) {
 export async function addTank(formData: FormData) {
   const session = await auth()
   // @ts-ignore
-  if (session?.user?.role !== "ADMIN") throw new Error("Unauthorized")
+  if (session?.user?.role !== "ADMIN") throw new Error("Unauthorized: Only Admin can add tanks.")
+
+  const name = (formData.get("name") as string)?.trim()
+  const fuelTypeId = formData.get("fuelTypeId") as string
+
+  if (!name || name.length < 2) throw new Error("Tank name is required.")
+  if (!fuelTypeId) throw new Error("Please select a fuel type.")
+
+  const capacity = parseFloat(formData.get("capacity") as string)
+  const initialVolume = parseFloat(formData.get("initialVolume") as string)
+
+  if (isNaN(capacity) || capacity <= 0) throw new Error("Capacity must be a positive number.")
+  if (isNaN(initialVolume) || initialVolume < 0) throw new Error("Initial volume must be zero or positive.")
+  if (initialVolume > capacity) throw new Error("Initial volume cannot exceed tank capacity.")
 
   await prisma.tank.create({
+    data: { name, capacity, currentVolume: initialVolume, fuelTypeId }
+  })
+
+  await prisma.activityLog.create({
     data: {
-      name: formData.get("name") as string,
-      capacity: parseFloat(formData.get("capacity") as string),
-      currentVolume: parseFloat(formData.get("initialVolume") as string),
-      fuelTypeId: formData.get("fuelTypeId") as string,
+      userId: (session as any).user.id,
+      action: "TANK_ADDED",
+      details: `Added tank: ${name} (Capacity: ${capacity}L, Initial: ${initialVolume}L)`
     }
   })
 
@@ -44,7 +79,7 @@ export async function addTank(formData: FormData) {
 }
 
 // ------------------------------------
-// 3. Reconcile Tank (Fix Discrepancies)
+// 3. Reconcile Tank
 // ------------------------------------
 export async function reconcileTank(formData: FormData) {
   const session = await auth()
@@ -54,25 +89,30 @@ export async function reconcileTank(formData: FormData) {
   }
 
   const tankId = formData.get("tankId") as string
-  const actualPhysicalVolume = parseFloat(formData.get("actualVolume") as string)
+  const actualStr = formData.get("actualVolume") as string
+
+  if (!tankId) throw new Error("Tank ID is required.")
+
+  const actualPhysicalVolume = parseFloat(actualStr)
+  if (isNaN(actualPhysicalVolume) || actualPhysicalVolume < 0) throw new Error("Actual volume must be zero or positive.")
 
   const tank = await prisma.tank.findUnique({ where: { id: tankId }})
-  if (!tank) throw new Error("Tank not found")
-  
-  const discrepancy = actualPhysicalVolume - tank.currentVolume
+  if (!tank) throw new Error("Tank not found.")
 
-  // 1. Update Tank
+  if (actualPhysicalVolume > tank.capacity) throw new Error(`Volume ${actualPhysicalVolume}L exceeds tank capacity ${tank.capacity}L.`)
+
+  const discrepancy = roundSAR(actualPhysicalVolume - tank.currentVolume)
+
   await prisma.tank.update({
     where: { id: tankId },
     data: { currentVolume: actualPhysicalVolume }
   })
 
-  // 2. Log exactly who did this reconciliation for Audit
   await prisma.activityLog.create({
     data: {
-      userId: session.user.id as string,
+      userId: (session as any).user.id as string,
       action: "RECONCILED_TANK",
-      details: `Tank ${tank.name}. Expected: ${tank.currentVolume}L. Actual: ${actualPhysicalVolume}L. Discrepancy: ${discrepancy}L.`
+      details: `Tank ${tank.name}. System: ${tank.currentVolume}L. Physical: ${actualPhysicalVolume}L. Discrepancy: ${discrepancy > 0 ? '+' : ''}${discrepancy}L.`
     }
   })
 
@@ -80,7 +120,7 @@ export async function reconcileTank(formData: FormData) {
 }
 
 // ------------------------------------
-// 4. Delete Tank (Safe Removal)
+// 4. Delete Tank
 // ------------------------------------
 export async function deleteTank(formData: FormData) {
   const session = await auth()
@@ -88,24 +128,20 @@ export async function deleteTank(formData: FormData) {
   if (session?.user?.role !== "ADMIN") throw new Error("Unauthorized")
 
   const tankId = formData.get("tankId") as string
+  if (!tankId) throw new Error("Tank ID is required.")
 
   const tank = await prisma.tank.findUnique({ where: { id: tankId } })
-  if (!tank) throw new Error("Tank not found")
+  if (!tank) throw new Error("Tank not found.")
 
-  // Safety Lock: Prevent deleting un-empty tanks to protect financial records
   if (tank.currentVolume > 0) {
-    throw new Error(`Safety Violation: Cannot delete a tank holding ${tank.currentVolume}L. Disperse or reconcile fuel to 0L first.`)
+    throw new Error(`Safety Violation: Cannot delete a tank holding ${tank.currentVolume}L. Reconcile fuel to 0L first.`)
   }
 
-  // Delete the physical tank
-  await prisma.tank.delete({
-    where: { id: tankId }
-  })
+  await prisma.tank.delete({ where: { id: tankId } })
 
-  // Audit
   await prisma.activityLog.create({
     data: {
-      userId: session.user.id as string,
+      userId: (session as any).user.id as string,
       action: "DELETED_TANK",
       details: `Deleted empty tank: ${tank.name} (Capacity: ${tank.capacity}L)`
     }

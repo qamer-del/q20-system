@@ -37,11 +37,11 @@ model FuelType {
   name          String    // e.g., "Super 98", "Diesel"
   code          String    @unique // e.g., "S98", "DSL"
   pricePerLiter Float
-  
+
   tanks         Tank[]
   salesItems    SaleItem[]
   purchases     Purchase[]
-  
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -51,10 +51,10 @@ model Tank {
   name          String    // e.g., "Tank 1 - Super 98"
   capacity      Float     // Total capacity in Liters
   currentVolume Float     // Current Liters available
-  
+
   fuelTypeId    String
   fuelType      FuelType  @relation(fields: [fuelTypeId], references: [id])
-  
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -64,26 +64,25 @@ model Tank {
 // ==========================================
 enum PaymentMethod {
   CASH
-  CREDIT_CARD
-  MADA
+  BANK
 }
 
 model Sale {
   id            String    @id @default(cuid())
-  invoiceNumber String    @unique // e.g., INV-10001
+  invoiceNumber String    @unique // e.g., INV-20260404-A1B2C
   totalAmount   Float
   vatAmount     Float     // standard 15% ZATCA
   netAmount     Float
   paymentMethod PaymentMethod
-  
+
   userId        String    // Cashier who made the sale
   user          User      @relation(fields: [userId], references: [id])
   items         SaleItem[]
-  
+
   // ZATCA specific fields (Phase 2)
   zatcaQrCode   String?   @db.Text
   zatcaHash     String?
-  
+
   // Accounting Link - A sale maps exactly to ONE journal entry
   journalEntryId String?  @unique
   journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
@@ -95,13 +94,13 @@ model SaleItem {
   id            String    @id @default(cuid())
   saleId        String
   sale          Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  
+
   fuelTypeId    String
   fuelType      FuelType  @relation(fields: [fuelTypeId], references: [id])
-  
+
   quantity      Float     // Liters sold
-  unitPrice     Float
-  totalPrice    Float
+  unitPrice     Float     // Price per liter (VAT-inclusive)
+  totalPrice    Float     // quantity × unitPrice (VAT-inclusive)
 }
 
 // ==========================================
@@ -119,17 +118,17 @@ model Supplier {
 model Purchase {
   id            String    @id @default(cuid())
   invoiceNumber String
-  
+
   supplierId    String
   supplier      Supplier  @relation(fields: [supplierId], references: [id])
-  
+
   fuelTypeId    String
   fuelType      FuelType  @relation(fields: [fuelTypeId], references: [id])
-  
+
   quantity      Float     // Liters purchased
   unitPrice     Float
   totalAmount   Float
-  
+
   // Accounting Link
   journalEntryId String?  @unique
   journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
@@ -154,9 +153,9 @@ model Account {
   code          String    @unique // e.g., "1001"
   name          String
   type          AccountType
-  
+
   transactions  LedgerTransaction[]
-  
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -166,9 +165,9 @@ model JournalEntry {
   id            String    @id @default(cuid())
   description   String
   date          DateTime  @default(now())
-  
+
   transactions  LedgerTransaction[]
-  
+
   // One-to-one relations back to source documents
   sale          Sale?
   purchase      Purchase?
@@ -179,14 +178,32 @@ model LedgerTransaction {
   id              String      @id @default(cuid())
   journalEntryId  String
   journalEntry    JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
-  
+
   accountId       String
   account         Account     @relation(fields: [accountId], references: [id])
-  
+
   debit           Float       @default(0) // Left side of ledger
   credit          Float       @default(0) // Right side of ledger
-  
+
   createdAt       DateTime    @default(now())
+}
+
+// ==========================================
+// System Reset Log
+// ==========================================
+enum ResetType {
+  INVOICES_ONLY
+  FINANCIAL_DATA
+  FULL_SYSTEM
+}
+
+model SystemReset {
+  id            String    @id @default(cuid())
+  type          ResetType
+  performedById String
+  reason        String?
+  details       String?   @db.Text
+  createdAt     DateTime  @default(now())
 }
 
 // ==========================================
@@ -196,7 +213,7 @@ model ActivityLog {
   id            String    @id @default(cuid())
   userId        String
   user          User      @relation(fields: [userId], references: [id])
-  action        String    // e.g., "MODIFIED_TANK", "DELETED_SALE"
+  action        String    // e.g., "SALE_PROCESSED", "SYSTEM_RESET"
   details       String?   @db.Text
   createdAt     DateTime  @default(now())
 }

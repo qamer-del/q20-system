@@ -1,15 +1,11 @@
 import { prisma } from "@/lib/prisma"
-import { Calculator, TrendingUp, HandCoins, Building, FileSpreadsheet } from "lucide-react"
+import { Calculator, TrendingUp, HandCoins, Building, FileSpreadsheet, Receipt, Info } from "lucide-react"
 import { cookies } from "next/headers"
 import enDict from "../../../../messages/en.json"
 import arDict from "../../../../messages/ar.json"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-
-function calcBalance(type: string, debit: number, credit: number) {
-  if (type === "ASSET" || type === "EXPENSE") return debit - credit
-  return credit - debit
-}
+import { calculateBalance, calculateZakat, roundSAR } from "@/lib/financial"
 
 async function getTranslation() {
   const cookieStore = await cookies()
@@ -23,29 +19,45 @@ export default async function ReportingPage() {
     include: { transactions: true }
   })
 
+  // Calculate all account balances using precision helpers
   const accounts = accountsData.map((account: any) => {
     const totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
     const totalCredit = account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
-    const balance = calcBalance(account.type, totalDebit, totalCredit)
-    return { ...account, balance }
+    const balance = calculateBalance(account.type, totalDebit, totalCredit)
+    return { ...account, totalDebit, totalCredit, balance }
   })
 
+  // Income Statement
   const revenues = accounts.filter((a: any) => a.type === "REVENUE")
   const expenses = accounts.filter((a: any) => a.type === "EXPENSE")
-  const totalRevenue = revenues.reduce((s: number, a: any) => s + a.balance, 0)
-  const totalExpense = expenses.reduce((s: number, a: any) => s + a.balance, 0)
-  const netIncome = totalRevenue - totalExpense
+  const totalRevenue = roundSAR(revenues.reduce((s: number, a: any) => s + a.balance, 0))
+  const totalExpense = roundSAR(expenses.reduce((s: number, a: any) => s + a.balance, 0))
+  const netIncome = roundSAR(totalRevenue - totalExpense)
 
+  // Balance Sheet
   const assets = accounts.filter((a: any) => a.type === "ASSET")
   const liabilities = accounts.filter((a: any) => a.type === "LIABILITY")
   const equities = accounts.filter((a: any) => a.type === "EQUITY")
   
-  const totalAssets = assets.reduce((s: number, a: any) => s + a.balance, 0)
-  const totalLiabilities = liabilities.reduce((s: number, a: any) => s + a.balance, 0)
-  const totalEquity = equities.reduce((s: number, a: any) => s + a.balance, 0)
+  const totalAssets = roundSAR(assets.reduce((s: number, a: any) => s + a.balance, 0))
+  const totalLiabilities = roundSAR(liabilities.reduce((s: number, a: any) => s + a.balance, 0))
+  const totalEquity = roundSAR(equities.reduce((s: number, a: any) => s + a.balance, 0))
 
-  const zakatBase = totalAssets - totalLiabilities
-  const zakatOwed = zakatBase > 0 ? zakatBase * 0.025 : 0
+  // Include Retained Earnings (Net Income) in equity for balance sheet
+  const totalEquityWithRetained = roundSAR(totalEquity + netIncome)
+
+  // VAT Summary
+  const vatPayable = accounts.find((a: any) => a.code === "2001")
+  const vatReceivable = accounts.find((a: any) => a.code === "1004")
+  const vatPayableBalance = vatPayable?.balance || 0
+  const vatReceivableBalance = vatReceivable?.balance || 0
+  const netVatOwed = roundSAR(vatPayableBalance - vatReceivableBalance)
+
+  // ZATCA Zakat Calculation (proper Saudi method)
+  const zakatData = calculateZakat(
+    accounts.map((a: any) => ({ type: a.type, balance: a.balance, code: a.code })),
+    'gregorian'
+  )
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 lg:p-12">
@@ -62,6 +74,38 @@ export default async function ReportingPage() {
              Export PDF
           </Button>
         </div>
+
+        {/* VAT Summary Card */}
+        <Card className="border-t-4 border-t-cyan-500 shadow-xl">
+          <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800 pb-6 mb-6">
+            <CardTitle className="text-xl font-black flex items-center gap-2">
+              <Receipt className="text-cyan-500 w-5 h-5" /> VAT Summary (ZATCA 15%)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/50 rounded-2xl p-6 text-center">
+                <span className="block text-[10px] uppercase tracking-widest text-rose-500 font-bold mb-2">VAT Collected (Output)</span>
+                <span className="text-2xl font-black text-rose-700 dark:text-rose-400">SAR {vatPayableBalance.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/50 rounded-2xl p-6 text-center">
+                <span className="block text-[10px] uppercase tracking-widest text-blue-500 font-bold mb-2">VAT Paid (Input)</span>
+                <span className="text-2xl font-black text-blue-700 dark:text-blue-400">SAR {vatReceivableBalance.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+              </div>
+              <div className={`${netVatOwed >= 0 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900/50' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-900/50'} border rounded-2xl p-6 text-center`}>
+                <span className="block text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">
+                  {netVatOwed >= 0 ? 'Net VAT Due to ZATCA' : 'VAT Refund Claimable'}
+                </span>
+                <span className={`text-2xl font-black ${netVatOwed >= 0 ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                  SAR {Math.abs(netVatOwed).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                </span>
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-400 text-center mt-4 uppercase tracking-widest font-bold flex items-center justify-center gap-1">
+              <Info className="w-3 h-3" /> Output VAT (15% on sales) minus Input VAT (15% on purchases) = Net payable to ZATCA
+            </p>
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
@@ -80,13 +124,13 @@ export default async function ReportingPage() {
                    {revenues.map((r: any) => (
                      <div key={r.id} className="flex justify-between text-slate-700 dark:text-slate-300">
                        <span className="font-sans font-bold">{r.name}</span>
-                       <span>SAR {r.balance.toLocaleString()}</span>
+                       <span>SAR {r.balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                      </div>
                    ))}
                    {revenues.length === 0 && <p className="text-slate-400 italic">No revenue recorded</p>}
                    <div className="flex justify-between font-black text-slate-900 dark:text-white mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
                      <span className="font-sans">{(dict.General as any).total}</span>
-                     <span>SAR {totalRevenue.toLocaleString()}</span>
+                     <span>SAR {totalRevenue.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                    </div>
                  </div>
                </div>
@@ -97,20 +141,20 @@ export default async function ReportingPage() {
                    {expenses.map((e: any) => (
                      <div key={e.id} className="flex justify-between text-slate-700 dark:text-slate-300">
                        <span className="font-sans font-bold">{e.name}</span>
-                       <span>SAR {e.balance.toLocaleString()}</span>
+                       <span>SAR {e.balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                      </div>
                    ))}
                    {expenses.length === 0 && <p className="text-slate-400 italic">No expenses recorded</p>}
                    <div className="flex justify-between font-black text-slate-900 dark:text-white mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
                      <span className="font-sans">{(dict.General as any).total}</span>
-                     <span>SAR {totalExpense.toLocaleString()}</span>
+                     <span>SAR {totalExpense.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                    </div>
                  </div>
                </div>
 
                <div className={`mt-8 p-6 rounded-2xl flex justify-between items-center ${netIncome >= 0 ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 border border-emerald-200 dark:border-emerald-900/50" : "bg-rose-50 dark:bg-rose-900/20 text-rose-700 border border-rose-200 dark:border-rose-900/50"}`}>
                  <span className="font-black uppercase tracking-widest text-[10px] dark:text-white">{(dict.Reporting as any).net_income}</span>
-                 <span className={`text-2xl font-black ${netIncome >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>SAR {netIncome.toLocaleString()}</span>
+                 <span className={`text-2xl font-black ${netIncome >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>SAR {netIncome.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                </div>
              </CardContent>
           </Card>
@@ -130,85 +174,125 @@ export default async function ReportingPage() {
                    {assets.map((a: any) => (
                      <div key={a.id} className="flex justify-between text-slate-700 dark:text-slate-300">
                        <span className="font-sans font-bold">{a.name}</span>
-                       <span>SAR {a.balance.toLocaleString()}</span>
+                       <span>SAR {a.balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                      </div>
                    ))}
                    {assets.length === 0 && <p className="text-slate-400 italic">No assets recorded</p>}
                    <div className="flex justify-between font-black text-slate-900 dark:text-white mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
                      <span className="font-sans">{(dict.General as any).total}</span>
-                     <span>SAR {totalAssets.toLocaleString()}</span>
+                     <span>SAR {totalAssets.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                    </div>
                  </div>
                </div>
 
                <div>
-                 <h3 className="font-bold text-slate-400 uppercase tracking-widest mb-4 border-b border-dashed border-slate-200 dark:border-slate-800 pb-2 text-[10px]">{(dict.Reporting as any).liabilities}</h3>
+                 <h3 className="font-bold text-slate-400 uppercase tracking-widest mb-4 border-b border-dashed border-slate-200 dark:border-slate-800 pb-2 text-[10px]">{(dict.Reporting as any).liabilities} + Equity</h3>
                  <div className="space-y-2 font-mono">
                    {liabilities.map((l: any) => (
                      <div key={l.id} className="flex justify-between text-slate-700 dark:text-slate-300">
                        <span className="font-sans font-bold">{l.name}</span>
-                       <span>SAR {l.balance.toLocaleString()}</span>
+                       <span>SAR {l.balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                      </div>
                    ))}
                    {equities.map((e: any) => (
                      <div key={e.id} className="flex justify-between text-slate-700 dark:text-slate-300">
                        <span className="font-sans font-bold">{e.name}</span>
-                       <span>SAR {e.balance.toLocaleString()}</span>
+                       <span>SAR {e.balance.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                      </div>
                    ))}
-                   {liabilities.length === 0 && equities.length === 0 && <p className="text-slate-400 italic">No liabilities/equity recorded</p>}
+                   {/* Retained Earnings (Net Income) */}
+                   {netIncome !== 0 && (
+                     <div className="flex justify-between text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg">
+                       <span className="font-sans font-bold italic">Retained Earnings (YTD)</span>
+                       <span>SAR {netIncome.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                     </div>
+                   )}
                    <div className="flex justify-between font-black text-slate-900 dark:text-white mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
                      <span className="font-sans">{(dict.General as any).total}</span>
-                     <span>SAR {(totalLiabilities + totalEquity).toLocaleString()}</span>
+                     <span>SAR {roundSAR(totalLiabilities + totalEquityWithRetained).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
                    </div>
                  </div>
                </div>
 
                <div className="mt-8 pt-6 border-t font-mono border-dashed border-slate-300 dark:border-slate-800">
-                  {totalAssets !== (totalLiabilities + totalEquity) && (
+                  {roundSAR(totalAssets) !== roundSAR(totalLiabilities + totalEquityWithRetained) ? (
                      <p className="text-[10px] text-rose-500 text-center font-bold tracking-widest uppercase border border-rose-200 bg-rose-50 p-3 rounded-xl dark:bg-rose-900/20 dark:border-rose-900">
-                       Ledger Out of Balance. Verify JEs.
+                       Ledger Out of Balance. Verify Journal Entries.
+                     </p>
+                  ) : (
+                     <p className="text-[10px] text-emerald-500 text-center font-bold tracking-widest uppercase border border-emerald-200 bg-emerald-50 p-3 rounded-xl dark:bg-emerald-900/20 dark:border-emerald-900">
+                       ✓ Assets = Liabilities + Equity — Ledger Balanced
                      </p>
                   )}
                </div>
              </CardContent>
           </Card>
 
-          {/* OFFICIAL ZAKAT DECLARATION */}
+          {/* OFFICIAL ZAKAT DECLARATION (ZATCA Compliant) */}
           <Card className="bg-gradient-to-br from-slate-900 to-slate-800 border-none shadow-2xl text-white overflow-hidden relative group">
              
-             {/* Decorative Background Icon */}
              <HandCoins className="absolute -right-8 -bottom-8 w-64 h-64 text-white opacity-5 rotate-12 group-hover:scale-110 transition-transform duration-700" />
 
              <CardHeader className="border-b border-slate-700/50 pb-6 mb-6 relative z-10">
                <CardTitle className="text-2xl font-black flex items-center gap-3">
                 <Calculator className="text-amber-400 w-6 h-6" /> {(dict.Reporting as any).zakat_report}
                </CardTitle>
+               <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-2">
+                 ZATCA Simplified Method (صافي الأصول المتداولة)
+               </p>
              </CardHeader>
 
              <CardContent className="relative z-10 p-8 pt-0">
-               <div className="space-y-6 text-sm font-mono tracking-widest font-bold">
-                  <div className="flex justify-between border-b border-slate-700/50 pb-3">
-                    <span className="text-slate-400 font-sans uppercase text-[10px]">{(dict.Reporting as any).assets}</span>
-                    <span>SAR {totalAssets.toLocaleString()}</span>
+               <div className="space-y-4 text-sm font-mono tracking-widest font-bold">
+                  
+                  {/* Zakatable Base Breakdown */}
+                  <div className="bg-slate-800/50 rounded-xl p-4 space-y-3 border border-slate-700/50">
+                    <p className="text-[10px] text-amber-400 uppercase tracking-widest font-black mb-3">مصادر الوعاء الزكوي — Zakatable Base Components</p>
+                    
+                    <div className="flex justify-between border-b border-slate-700/30 pb-2">
+                      <span className="text-slate-400 font-sans text-[10px] uppercase">Current Assets (Cash + Bank + VAT Receivable)</span>
+                      <span className="text-white">SAR {zakatData.currentAssets.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-700/30 pb-2">
+                      <span className="text-slate-400 font-sans text-[10px] uppercase">(Less) Current Liabilities (VAT Payable)</span>
+                      <span className="text-rose-400">- SAR {zakatData.currentLiabilities.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                    </div>
+                    {zakatData.equity > 0 && (
+                      <div className="flex justify-between border-b border-slate-700/30 pb-2">
+                        <span className="text-slate-400 font-sans text-[10px] uppercase">Equity</span>
+                        <span>SAR {zakatData.equity.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between pt-2">
+                      <span className="text-amber-400 font-sans text-[10px] uppercase font-black">الوعاء الزكوي (Zakatable Base)</span>
+                      <span className="text-amber-400 font-black text-lg">SAR {zakatData.zakatBase.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between border-b border-slate-700/50 pb-3">
-                    <span className="text-slate-400 font-sans uppercase text-[10px]">(Less) {(dict.Reporting as any).liabilities}</span>
-                    <span>SAR {totalLiabilities.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between pt-3">
-                    <span className="text-slate-300 font-sans uppercase text-[10px]">{(dict.Reporting as any).zakat_base}</span>
-                    <span className="text-amber-400">SAR {zakatBase.toLocaleString()}</span>
-                  </div>
-               </div>
 
-               <div className="mt-10 bg-slate-800/80 border border-slate-700 rounded-2xl p-6 relative z-10 text-center backdrop-blur-md shadow-inner">
-                  <span className="block text-[10px] uppercase tracking-widest text-slate-400 mb-2 font-black">Estimated Zakat Due (2.5%)</span>
-                  <span className="text-4xl font-black text-amber-400 tracking-tighter">SAR {zakatOwed.toLocaleString()}</span>
+                  {/* Rate Information */}
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-3 text-center">
+                      <span className="block text-[9px] text-slate-500 uppercase tracking-widest mb-1">Hijri Year Rate</span>
+                      <span className="font-black text-white">2.5%</span>
+                      <span className="block text-amber-400 font-mono mt-1">SAR {zakatData.zakatDueHijri.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                    </div>
+                    <div className="bg-slate-800/30 border border-amber-900/50 rounded-lg p-3 text-center">
+                      <span className="block text-[9px] text-slate-500 uppercase tracking-widest mb-1">Gregorian Year Rate</span>
+                      <span className="font-black text-amber-400">≈2.578%</span>
+                      <span className="block text-amber-400 font-mono mt-1">SAR {zakatData.zakatDueGregorian.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                    </div>
+                  </div>
+
+                  {/* Final Zakat Owed */}
+                  <div className="mt-6 bg-slate-800/80 border border-slate-700 rounded-2xl p-6 relative z-10 text-center backdrop-blur-md shadow-inner">
+                    <span className="block text-[10px] uppercase tracking-widest text-slate-400 mb-2 font-black">الزكاة المستحقة — Estimated Zakat Due</span>
+                    <span className="text-4xl font-black text-amber-400 tracking-tighter">SAR {zakatData.zakatOwed.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                    <span className="block text-[9px] text-slate-500 mt-2 uppercase tracking-widest">Based on Gregorian calendar (365 days)</span>
+                  </div>
                </div>
                
                <p className="text-[9px] text-slate-500 text-center mt-6 uppercase tracking-widest font-bold">
-                 Saudi General Authority of Zakat & Tax
+                 هيئة الزكاة والضريبة والجمارك — Saudi General Authority of Zakat, Tax & Customs
                </p>
              </CardContent>
           </Card>

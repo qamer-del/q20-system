@@ -88,6 +88,21 @@ export default async function PurchasesPage() {
                      <Input type="number" step="0.1" name="quantity" placeholder="10000" required className="h-20 text-4xl border-2 font-mono text-center font-black !rounded-2xl text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-900/10 focus-visible:ring-4 focus-visible:ring-blue-600/20 md:tracking-widest" />
                    </div>
 
+                   {/* Payment Method — Required */}
+                   <div className="space-y-3">
+                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Payment Method</label>
+                     <div className="flex gap-4">
+                       <label className="flex-1 cursor-pointer">
+                         <input type="radio" name="paymentMethod" value="CASH" className="peer hidden" required />
+                         <div className="peer-checked:bg-emerald-600 peer-checked:text-white peer-checked:border-emerald-600 peer-checked:shadow-lg bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-4 text-center font-bold transition-all uppercase tracking-widest text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">Cash</div>
+                       </label>
+                       <label className="flex-1 cursor-pointer">
+                         <input type="radio" name="paymentMethod" value="BANK" className="peer hidden" />
+                         <div className="peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600 peer-checked:shadow-lg bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-4 text-center font-bold transition-all uppercase tracking-widest text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">Bank</div>
+                       </label>
+                     </div>
+                   </div>
+
                    <Button type="submit" variant="primary" className="w-full h-16 text-lg mt-4 shadow-xl">
                      <ArrowRightLeft className="w-6 h-6 mr-3" /> {(dict.Purchases as any).log_delivery}
                    </Button>

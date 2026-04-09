@@ -7,16 +7,12 @@ import arDict from "../../../../messages/ar.json"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { calculateBalance, roundSAR } from "@/lib/financial"
 
 async function getTranslation() {
   const cookieStore = await cookies()
   const locale = cookieStore.get("NEXT_LOCALE")?.value || "en"
   return locale === "ar" ? arDict : enDict
-}
-
-function calculateBalance(type: string, debit: number, credit: number) {
-  if (type === "ASSET" || type === "EXPENSE") return debit - credit
-  return credit - debit
 }
 
 export default async function AccountingPage() {
@@ -27,8 +23,8 @@ export default async function AccountingPage() {
   })
 
   const chartOfAccounts = accountsData.map((account: any) => {
-    const totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
-    const totalCredit = account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
+    const totalDebit = roundSAR(account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0))
+    const totalCredit = roundSAR(account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0))
     const balance = calculateBalance(account.type, totalDebit, totalCredit)
     return { ...account, totalDebit, totalCredit, balance }
   })
@@ -38,6 +34,11 @@ export default async function AccountingPage() {
     orderBy: { date: 'desc' },
     include: { transactions: { include: { account: true } } }
   })
+
+  // Calculate trial balance totals
+  const trialDebit = roundSAR(chartOfAccounts.reduce((s: number, a: any) => s + a.totalDebit, 0))
+  const trialCredit = roundSAR(chartOfAccounts.reduce((s: number, a: any) => s + a.totalCredit, 0))
+  const isBalanced = trialDebit === trialCredit
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 lg:p-12">
@@ -50,6 +51,10 @@ export default async function AccountingPage() {
              </div>
              {(dict.Accounting as any).title}
           </h1>
+          {/* Trial Balance Indicator */}
+          <div className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest ${isBalanced ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-900 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-900/20 dark:border-rose-900 dark:text-rose-400'}`}>
+            {isBalanced ? '✓ Trial Balance OK' : '⚠ Out of Balance'}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -84,15 +89,28 @@ export default async function AccountingPage() {
                          <td className="p-5 text-[10px] uppercase font-bold text-slate-400 tracking-widest">
                            {(dict.Accounting as any)[acc.type.toLowerCase()] || acc.type}
                          </td>
-                         <td className="p-5 text-right font-mono text-slate-400">{acc.totalDebit.toLocaleString()}</td>
-                         <td className="p-5 text-right font-mono text-slate-400">{acc.totalCredit.toLocaleString()}</td>
+                         <td className="p-5 text-right font-mono text-slate-400">{acc.totalDebit.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                         <td className="p-5 text-right font-mono text-slate-400">{acc.totalCredit.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
                          <td className={`p-5 text-right font-black ${acc.balance < 0 ? 'text-rose-600 dark:text-rose-500' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                           SAR {acc.balance.toLocaleString()}
+                           SAR {acc.balance.toLocaleString(undefined, {minimumFractionDigits: 2})}
                          </td>
                        </tr>
                      ))}
                      {chartOfAccounts.length === 0 && (
                        <tr><td colSpan={5} className="p-8 text-center text-slate-400 italic">No accounts exist yet.</td></tr>
+                     )}
+                     {/* Trial Balance Footer */}
+                     {chartOfAccounts.length > 0 && (
+                       <tr className="bg-slate-100 dark:bg-slate-900 border-t-2 border-slate-300 dark:border-slate-700">
+                         <td colSpan={2} className="p-5 font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Trial Balance Total</td>
+                         <td className="p-5 text-right font-mono font-black text-slate-900 dark:text-white">{trialDebit.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                         <td className="p-5 text-right font-mono font-black text-slate-900 dark:text-white">{trialCredit.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                         <td className="p-5 text-right">
+                           <span className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${isBalanced ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'}`}>
+                             {isBalanced ? 'Balanced' : `Δ ${roundSAR(Math.abs(trialDebit - trialCredit)).toFixed(2)}`}
+                           </span>
+                         </td>
+                       </tr>
                      )}
                    </tbody>
                  </table>
@@ -157,7 +175,7 @@ export default async function AccountingPage() {
                    </div>
                    <div className="space-y-1">
                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{(dict.General as any).amount}</label>
-                     <Input type="number" step="0.01" name="amount" placeholder="0.00" required className="font-mono text-xl text-center font-black" />
+                     <Input type="number" step="0.01" min="0.01" name="amount" placeholder="0.00" required className="font-mono text-xl text-center font-black" />
                    </div>
                    <Button type="submit" variant="secondary" className="w-full mt-2">{(dict.Accounting as any).create_entry}</Button>
                  </form>
@@ -177,32 +195,42 @@ export default async function AccountingPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentJournals.map((journal: any) => (
-                <div key={journal.id} className="border border-slate-200 dark:border-slate-800 rounded-2xl p-6 hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors shadow-sm">
-                  <div className="flex justify-between items-center mb-4 border-b border-dashed border-slate-200 dark:border-slate-700 pb-3">
-                    <span className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-wider">{journal.description}</span>
-                    <span className="text-[10px] text-slate-400 font-mono tracking-widest font-bold bg-slate-100 dark:bg-slate-900 px-3 py-1 rounded-md">{journal.id} • {new Date(journal.date).toLocaleString()}</span>
-                  </div>
-                  <div className="space-y-2">
-                    {journal.transactions.map((t: any, i: number) => (
-                      <div key={i} className="flex justify-between text-sm font-mono tracking-wider items-center p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900">
-                        <span className={`${t.credit > 0 ? "ml-12 text-rose-600 dark:text-rose-400" : "font-bold text-emerald-600 dark:text-emerald-400"} flex items-center gap-2`}>
-                          <span className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 rounded">{t.account.code}</span>
-                          {t.account.name}
-                        </span>
-                        <div className="w-64 flex justify-between bg-white dark:bg-slate-950 px-4 py-2 rounded-md border border-slate-100 dark:border-slate-800 shadow-inner">
-                          <span className={t.debit > 0 ? "text-slate-900 dark:text-white font-black" : "text-slate-300 dark:text-slate-700"}>
-                            {t.debit > 0 ? t.debit.toFixed(2) : ""}
-                          </span>
-                          <span className={t.credit > 0 ? "text-slate-900 dark:text-white font-black" : "text-slate-300 dark:text-slate-700"}>
-                            {t.credit > 0 ? t.credit.toFixed(2) : ""}
-                          </span>
-                        </div>
+              {recentJournals.map((journal: any) => {
+                // Verify each JE balances
+                const jeDebit = roundSAR(journal.transactions.reduce((s: number, t: any) => s + t.debit, 0))
+                const jeCredit = roundSAR(journal.transactions.reduce((s: number, t: any) => s + t.credit, 0))
+                const jeBalanced = jeDebit === jeCredit
+
+                return (
+                  <div key={journal.id} className={`border rounded-2xl p-6 hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors shadow-sm ${jeBalanced ? 'border-slate-200 dark:border-slate-800' : 'border-rose-300 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-900/10'}`}>
+                    <div className="flex justify-between items-center mb-4 border-b border-dashed border-slate-200 dark:border-slate-700 pb-3">
+                      <div className="flex items-center gap-3">
+                        <span className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-wider">{journal.description}</span>
+                        {!jeBalanced && <span className="text-[10px] bg-rose-100 text-rose-600 px-2 py-1 rounded font-bold uppercase">UNBALANCED</span>}
                       </div>
-                    ))}
+                      <span className="text-[10px] text-slate-400 font-mono tracking-widest font-bold bg-slate-100 dark:bg-slate-900 px-3 py-1 rounded-md">{new Date(journal.date).toLocaleString()}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {journal.transactions.map((t: any, i: number) => (
+                        <div key={i} className="flex justify-between text-sm font-mono tracking-wider items-center p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900">
+                          <span className={`${t.credit > 0 ? "ml-12 text-rose-600 dark:text-rose-400" : "font-bold text-emerald-600 dark:text-emerald-400"} flex items-center gap-2`}>
+                            <span className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 rounded">{t.account.code}</span>
+                            {t.account.name}
+                          </span>
+                          <div className="w-64 flex justify-between bg-white dark:bg-slate-950 px-4 py-2 rounded-md border border-slate-100 dark:border-slate-800 shadow-inner">
+                            <span className={t.debit > 0 ? "text-slate-900 dark:text-white font-black" : "text-slate-300 dark:text-slate-700"}>
+                              {t.debit > 0 ? t.debit.toFixed(2) : ""}
+                            </span>
+                            <span className={t.credit > 0 ? "text-slate-900 dark:text-white font-black" : "text-slate-300 dark:text-slate-700"}>
+                              {t.credit > 0 ? t.credit.toFixed(2) : ""}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               {recentJournals.length === 0 && <p className="text-center text-slate-400 py-12">No active ledgers recorded.</p>}
             </div>
           </CardContent>

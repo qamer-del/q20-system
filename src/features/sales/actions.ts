@@ -3,88 +3,108 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/auth"
+import {
+  roundSAR,
+  multiply,
+  extractVatFromInclusive,
+  generateInvoiceNumber,
+} from "@/lib/financial"
+import { generateZatcaTlvBase64 } from "@/features/zatca/engine"
 
-// Helper to ensure core accounting ledgers exist so POS doesn't crash on Day 1
+// =============================================
+// Centralized Account Seeding (called once per tx)
+// =============================================
 async function getOrSeedAccounts(tx: any) {
-  const c = await tx.account.upsert({ where: { code: "1001" }, update: {}, create: { code: "1001", name: "Cash on Hand", type: "ASSET" }})
-  const b = await tx.account.upsert({ where: { code: "1002" }, update: {}, create: { code: "1002", name: "Bank / Mada POS", type: "ASSET" }})
-  const s = await tx.account.upsert({ where: { code: "4001" }, update: {}, create: { code: "4001", name: "Sales Revenue", type: "REVENUE" }})
-  const v = await tx.account.upsert({ where: { code: "2001" }, update: {}, create: { code: "2001", name: "VAT Payable (ZATCA 15%)", type: "LIABILITY" }})
-  return { cash: c, bank: b, sales: s, vat: v }
+  const cash = await tx.account.upsert({ where: { code: "1001" }, update: {}, create: { code: "1001", name: "Cash on Hand", type: "ASSET" }})
+  const bank = await tx.account.upsert({ where: { code: "1002" }, update: {}, create: { code: "1002", name: "Bank Account", type: "ASSET" }})
+  const sales = await tx.account.upsert({ where: { code: "4001" }, update: {}, create: { code: "4001", name: "Sales Revenue", type: "REVENUE" }})
+  const vatPayable = await tx.account.upsert({ where: { code: "2001" }, update: {}, create: { code: "2001", name: "VAT Payable (ZATCA 15%)", type: "LIABILITY" }})
+  return { cash, bank, sales, vatPayable }
 }
 
+// =============================================
+// CORE POS SALE — Production-Grade
+// =============================================
 export async function processSale(formData: FormData) {
   const session = await auth()
   // @ts-ignore
-  if (!session?.user?.id) throw new Error("Unauthorized")
-  
+  if (!session?.user?.id) throw new Error("Unauthorized: Please log in.")
+
+  // 1. Extract & Validate Inputs
   const tankId = formData.get("tankId") as string
   const quantityString = formData.get("quantity") as string
-  const paymentMethod = formData.get("paymentMethod") as "CASH" | "CREDIT_CARD" | "MADA"
-  
+  const paymentMethod = formData.get("paymentMethod") as string
+
+  if (!tankId) throw new Error("Validation Error: Please select a fuel tank.")
+  if (!quantityString) throw new Error("Validation Error: Please enter a quantity.")
+
+  // CRITICAL FIX: Enforce payment method selection
+  if (!paymentMethod || !["CASH", "BANK"].includes(paymentMethod)) {
+    throw new Error("Validation Error: Please select a valid payment method (Cash or Bank).")
+  }
+
   const quantity = parseFloat(quantityString)
-  if (isNaN(quantity) || quantity <= 0) throw new Error("Invalid quantity")
+  if (isNaN(quantity) || quantity <= 0) throw new Error("Validation Error: Quantity must be a positive number.")
+  if (quantity > 99999) throw new Error("Validation Error: Quantity exceeds maximum limit.")
 
-  // ==========================================
-  // CORE POS TRANSACTION ENGINE
-  // ==========================================
+  // 2. Execute Atomic Transaction
   await prisma.$transaction(async (tx: any) => {
-    // 1. Validate Inventory
+    // 2a. Validate Inventory
     const tank = await tx.tank.findUnique({ where: { id: tankId }, include: { fuelType: true } })
-    if (!tank) throw new Error("Tank not found")
-    if (tank.currentVolume < quantity) throw new Error(`Not enough fuel in ${tank.name}. Only ${tank.currentVolume}L left.`)
+    if (!tank) throw new Error("Error: Tank not found.")
+    if (tank.currentVolume < quantity) {
+      throw new Error(`Insufficient fuel in ${tank.name}. Available: ${roundSAR(tank.currentVolume)}L. Requested: ${quantity}L.`)
+    }
 
-    // 2. Calculate Financials
+    // 2b. Calculate Financials with Precision
     const unitPrice = tank.fuelType.pricePerLiter
-    const totalAmount = parseFloat((quantity * unitPrice).toFixed(2))
-    
-    // Reverse calculating VAT (15% standard Saudi VAT) assuming pump price includes VAT.
-    const netAmount = parseFloat((totalAmount / 1.15).toFixed(2))
-    const vatAmount = parseFloat((totalAmount - netAmount).toFixed(2))
+    const grossTotal = multiply(quantity, unitPrice)
+    const { netAmount, vatAmount, totalAmount } = extractVatFromInclusive(grossTotal)
 
-    // 3. Deduct Inventory Immediately
+    // 2c. Deduct Inventory
     await tx.tank.update({
       where: { id: tankId },
       data: { currentVolume: { decrement: quantity } }
     })
 
+    // 2d. Double-Entry Journal Entry
     const accounts = await getOrSeedAccounts(tx)
-    const isCash = paymentMethod === "CASH"
-    const debitAccount = isCash ? accounts.cash : accounts.bank
+    const debitAccount = paymentMethod === "CASH" ? accounts.cash : accounts.bank
 
-    // 4. Double-Entry Accounting (Journal Entry)
     const journal = await tx.journalEntry.create({
       data: {
         description: `POS Sale: ${quantity}L of ${tank.fuelType.name} via ${paymentMethod}`,
         transactions: {
           create: [
-            // Debit: We received Cash or Bank from customer
             { accountId: debitAccount.id, debit: totalAmount, credit: 0 },
-            // Credit: We recognize Sales Revenue (pure profit without VAT)
             { accountId: accounts.sales.id, debit: 0, credit: netAmount },
-            // Credit: We owe ZATCA the 15% VAT
-            { accountId: accounts.vat.id, debit: 0, credit: vatAmount }
+            { accountId: accounts.vatPayable.id, debit: 0, credit: vatAmount }
           ]
         }
       }
     })
 
-    // 5. Generate ZATCA Phase 2 Prep Payload (Base64 TLV format mock)
-    const zatcaString = `1:Station, 2:300000000000003, 3:${new Date().toISOString()}, 4:${totalAmount}, 5:${vatAmount}`
-    const b64QRPayload = Buffer.from(zatcaString).toString("base64")
+    // 2e. ZATCA QR Code (Phase 2 TLV format)
+    const zatcaQrCode = generateZatcaTlvBase64(
+      "Fuel Station LLC",
+      "300000000000003",
+      new Date().toISOString(),
+      totalAmount.toFixed(2),
+      vatAmount.toFixed(2)
+    )
 
-    // 6. Finalize Sale Record
+    // 2f. Create Sale Record
     await tx.sale.create({
       data: {
-        invoiceNumber: `INV-${Date.now()}`,
+        invoiceNumber: generateInvoiceNumber("INV"),
         totalAmount,
         netAmount,
         vatAmount,
-        paymentMethod,
+        paymentMethod: paymentMethod as any,
         // @ts-ignore
         userId: session.user.id,
-        zatcaQrCode: b64QRPayload,
-        zatcaHash: "PREP-HASH-PHASE-2",
+        zatcaQrCode,
+        zatcaHash: "PENDING-CLEARANCE",
         journalEntryId: journal.id,
         items: {
           create: [{
@@ -96,10 +116,22 @@ export async function processSale(formData: FormData) {
         }
       }
     })
+
+    // 2g. Audit Log
+    await tx.activityLog.create({
+      data: {
+        // @ts-ignore
+        userId: session.user.id,
+        action: "SALE_PROCESSED",
+        details: `Sale: ${quantity}L ${tank.fuelType.name} @ SAR ${unitPrice}/L = SAR ${totalAmount.toFixed(2)} (VAT: SAR ${vatAmount.toFixed(2)}). Payment: ${paymentMethod}. Tank: ${tank.name}.`
+      }
+    })
   })
 
-  // Refresh all dashboards to immediately show the new Sales, Profits, and Zakat!
   revalidatePath("/pos")
   revalidatePath("/dashboard")
   revalidatePath("/inventory")
+  revalidatePath("/invoices")
+  revalidatePath("/accounting")
+  revalidatePath("/reporting")
 }

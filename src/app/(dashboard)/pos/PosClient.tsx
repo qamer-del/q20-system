@@ -7,11 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react"
+import { roundSAR } from "@/lib/financial"
 
 export default function PosClient({ tanks }: { tanks: any[] }) {
   const { t } = useI18n()
   const [selectedTank, setSelectedTank] = useState(tanks[0]?.id || "")
   const [liters, setLiters] = useState("")
+  const [selectedPayment, setSelectedPayment] = useState("") // No default — force selection
   const [isProcessing, setIsProcessing] = useState(false)
   const [message, setMessage] = useState("")
 
@@ -19,19 +21,28 @@ export default function PosClient({ tanks }: { tanks: any[] }) {
   const pricePerLiter = activeTank?.fuelType.pricePerLiter || 0
   const quantity = parseFloat(liters) || 0
   
-  const totalAmount = quantity * pricePerLiter
-  const netAmount = totalAmount / 1.15
-  const vatAmount = totalAmount - netAmount
+  // Precision calculations matching server-side logic
+  const totalAmount = roundSAR(quantity * pricePerLiter)
+  const netAmount = roundSAR(totalAmount / 1.15)
+  const vatAmount = roundSAR(totalAmount - netAmount)
 
   const handleSale = async (formData: FormData) => {
     setIsProcessing(true)
     setMessage("")
     try {
+      // Client-side pre-validation
+      if (!selectedPayment) {
+        throw new Error("Please select a payment method before completing the sale.")
+      }
+      if (quantity <= 0) {
+        throw new Error("Please enter a valid quantity.")
+      }
       if (quantity > activeTank.currentVolume) {
-        throw new Error("Cannot sell more than available volume!")
+        throw new Error(`Cannot sell more than available volume (${roundSAR(activeTank.currentVolume)}L).`)
       }
       await processSale(formData)
       setLiters("")
+      setSelectedPayment("")
       setMessage(t("success_msg"))
     } catch (e: any) {
       setMessage(t("error") + ": " + e.message)
@@ -72,22 +83,45 @@ export default function PosClient({ tanks }: { tanks: any[] }) {
                 value={liters}
                 onChange={(e) => setLiters(e.target.value)}
                 step="0.01"
+                min="0.01"
                 required 
                 className="h-20 text-4xl font-mono text-center font-black !rounded-2xl dark:text-emerald-400 focus-visible:ring-4 focus-visible:ring-blue-600/20 border-2"
                 placeholder="0.00"
               />
             </div>
 
+            {/* PAYMENT METHOD — Required Selection */}
             <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t("payment_method")}</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                {t("payment_method")}
+                {!selectedPayment && quantity > 0 && (
+                  <span className="text-rose-500 text-[10px] font-bold animate-pulse">← Required</span>
+                )}
+              </label>
               <div className="flex gap-4">
                 <label className="flex-1 cursor-pointer">
-                  <input type="radio" name="paymentMethod" value="CASH" defaultChecked className="peer hidden" />
+                  <input 
+                    type="radio" 
+                    name="paymentMethod" 
+                    value="CASH" 
+                    className="peer hidden" 
+                    checked={selectedPayment === "CASH"}
+                    onChange={() => setSelectedPayment("CASH")}
+                  />
                   <div className="peer-checked:bg-emerald-600 peer-checked:text-white peer-checked:border-emerald-600 peer-checked:shadow-lg peer-checked:shadow-emerald-900/20 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 text-center font-bold transition-all uppercase tracking-widest text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">{t("cash")}</div>
                 </label>
                 <label className="flex-1 cursor-pointer">
-                  <input type="radio" name="paymentMethod" value="MADA" className="peer hidden" />
-                  <div className="peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600 peer-checked:shadow-lg peer-checked:shadow-indigo-900/20 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 text-center font-bold transition-all uppercase tracking-widest text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">{t("card")}</div>
+                  <input 
+                    type="radio" 
+                    name="paymentMethod" 
+                    value="BANK" 
+                    className="peer hidden" 
+                    checked={selectedPayment === "BANK"}
+                    onChange={() => setSelectedPayment("BANK")}
+                  />
+                  <div className="peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600 peer-checked:shadow-lg peer-checked:shadow-indigo-900/20 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 text-center font-bold transition-all uppercase tracking-widest text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                    {t("bank") || "Bank"}
+                  </div>
                 </label>
               </div>
             </div>
@@ -101,11 +135,10 @@ export default function PosClient({ tanks }: { tanks: any[] }) {
 
             <Button 
                type="submit" 
-               variant="primary"
-               disabled={isProcessing || quantity <= 0}
-               className="w-full h-16 text-lg rounded-2xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 shadow-xl"
+               disabled={isProcessing || quantity <= 0 || !selectedPayment}
+               className="w-full h-16 text-lg rounded-2xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : t("checkout")}
+              {isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : !selectedPayment && quantity > 0 ? "Select Payment Method" : t("checkout")}
             </Button>
           </form>
         </CardContent>
@@ -130,6 +163,14 @@ export default function PosClient({ tanks }: { tanks: any[] }) {
           <div className="flex justify-between items-center text-slate-600 dark:text-slate-400 font-bold border-b border-dashed border-slate-200 dark:border-slate-700 pb-4">
             <span className="uppercase tracking-widest text-[10px]">{t("quantity")}</span>
             <span className="text-slate-900 dark:text-white text-base">{quantity.toFixed(2)} L</span>
+          </div>
+
+          {/* Payment Method Indicator */}
+          <div className="flex justify-between items-center text-slate-600 dark:text-slate-400 font-bold border-b border-slate-100 dark:border-slate-800 pb-4">
+            <span className="uppercase tracking-widest text-[10px]">{t("payment_method")}</span>
+            <span className={`text-base font-black ${selectedPayment === "CASH" ? "text-emerald-600" : selectedPayment === "BANK" ? "text-indigo-600" : "text-slate-300 dark:text-slate-700"}`}>
+              {selectedPayment || "—"}
+            </span>
           </div>
           
           <div className="pt-2 space-y-3 text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-widest">

@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
-import { Droplet, Activity, CircleDollarSign, LayoutDashboard, DatabaseZap } from "lucide-react"
+import { Droplet, Activity, CircleDollarSign, LayoutDashboard, DatabaseZap, Banknote, Landmark } from "lucide-react"
 import { cookies } from "next/headers"
 import enDict from "../../../../messages/en.json"
 import arDict from "../../../../messages/ar.json"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { calculateBalance, calculateZakat, roundSAR } from "@/lib/financial"
 
 async function getTranslation() {
   const cookieStore = await cookies()
@@ -24,14 +25,27 @@ export default async function DashboardPage() {
   const tanks = await prisma.tank.findMany()
   const sales = await prisma.sale.findMany({ take: 5, orderBy: { createdAt: 'desc' }, include: { items: true }})
   
-  // 2. Aggregate Data
+  // 2. Aggregate Financial Data with Precision
   const totalSales = await prisma.sale.aggregate({ _sum: { totalAmount: true } })
-  const salesAmount = totalSales._sum.totalAmount || 0
+  const salesAmount = roundSAR(totalSales._sum.totalAmount || 0)
   
   const accountsData = await prisma.account.findMany({ include: { transactions: true } })
-  const assets = accountsData.filter((a: any) => a.type === "ASSET").reduce((sum: number, a: any) => sum + a.transactions.reduce((s: number, t: any) => s + t.debit - t.credit, 0), 0)
-  const liabilities = accountsData.filter((a: any) => a.type === "LIABILITY").reduce((sum: number, a: any) => sum + a.transactions.reduce((s: number, t: any) => s + t.credit - t.debit, 0), 0)
-  const estimatedZakat = (assets - liabilities) * 0.025
+  const accounts = accountsData.map((account: any) => {
+    const totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
+    const totalCredit = account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
+    const balance = calculateBalance(account.type, totalDebit, totalCredit)
+    return { ...account, balance, code: account.code, type: account.type }
+  })
+
+  // Cash & Bank balances
+  const cashBalance = roundSAR(accounts.find((a: any) => a.code === "1001")?.balance || 0)
+  const bankBalance = roundSAR(accounts.find((a: any) => a.code === "1002")?.balance || 0)
+
+  // Zakat (ZATCA compliant)
+  const zakatData = calculateZakat(
+    accounts.map((a: any) => ({ type: a.type, balance: a.balance, code: a.code })),
+    'gregorian'
+  )
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 lg:p-12">
@@ -50,8 +64,8 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Top Kpis */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Top KPIs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <Card className="hover:shadow-md transition-shadow border-t-4 border-t-emerald-500">
              <CardHeader className="pb-2">
                <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500 flex justify-between">
@@ -60,7 +74,31 @@ export default async function DashboardPage() {
                </CardTitle>
              </CardHeader>
              <CardContent>
-               <span className="text-3xl font-black text-slate-900 dark:text-white">SAR {salesAmount.toLocaleString()}</span>
+               <span className="text-3xl font-black text-slate-900 dark:text-white">SAR {salesAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+             </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow border-t-4 border-t-green-500">
+             <CardHeader className="pb-2">
+               <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500 flex justify-between">
+                 Cash Balance
+                 <Banknote className="w-4 h-4 text-green-500" />
+               </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <span className={`text-3xl font-black ${cashBalance >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600'}`}>SAR {cashBalance.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+             </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-md transition-shadow border-t-4 border-t-indigo-500">
+             <CardHeader className="pb-2">
+               <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500 flex justify-between">
+                 Bank Balance
+                 <Landmark className="w-4 h-4 text-indigo-500" />
+               </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <span className={`text-3xl font-black ${bankBalance >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600'}`}>SAR {bankBalance.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
              </CardContent>
           </Card>
 
@@ -91,7 +129,8 @@ export default async function DashboardPage() {
                </CardTitle>
              </CardHeader>
              <CardContent>
-               <span className="text-3xl font-black text-amber-600 dark:text-amber-400">SAR {estimatedZakat > 0 ? estimatedZakat.toLocaleString() : "0"}</span>
+               <span className="text-3xl font-black text-amber-600 dark:text-amber-400">SAR {zakatData.zakatOwed > 0 ? zakatData.zakatOwed.toLocaleString(undefined, {minimumFractionDigits: 2}) : "0.00"}</span>
+               <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-bold">ZATCA 2.578% (Gregorian)</p>
              </CardContent>
           </Card>
         </div>
@@ -109,6 +148,7 @@ export default async function DashboardPage() {
                      <tr>
                        <th className="p-4">Time</th>
                        <th className="p-4">Invoice #</th>
+                       <th className="p-4 text-center">Payment</th>
                        <th className="p-4 text-center">{(dict.General as any).status}</th>
                        <th className="p-4 text-right">Total</th>
                      </tr>
@@ -119,14 +159,23 @@ export default async function DashboardPage() {
                          <td className="p-4 text-slate-500 dark:text-slate-400 font-mono text-xs">{new Date(s.createdAt).toLocaleTimeString()}</td>
                          <td className="p-4 font-bold text-slate-900 dark:text-white">{s.invoiceNumber}</td>
                          <td className="p-4 text-center">
+                            <span className={`px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-widest ${
+                              s.paymentMethod === 'CASH' 
+                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-900' 
+                                : 'bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-900'
+                            }`}>
+                               {s.paymentMethod}
+                            </span>
+                         </td>
+                         <td className="p-4 text-center">
                             <span className="px-2 py-1 bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-900 rounded-md text-[10px] uppercase font-bold tracking-widest">
                                PAID
                             </span>
                          </td>
-                         <td className="p-4 text-right font-black text-slate-900 dark:text-white">SAR {s.totalAmount.toLocaleString()}</td>
+                         <td className="p-4 text-right font-black text-slate-900 dark:text-white">SAR {s.totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
                        </tr>
                      ))}
-                     {sales.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-slate-400">No recent sales.</td></tr>}
+                     {sales.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">No recent sales.</td></tr>}
                    </tbody>
                  </table>
                </div>

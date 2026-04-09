@@ -12,7 +12,8 @@ import {
   FileSpreadsheet, 
   History, 
   Users,
-  LogOut
+  LogOut,
+  Settings
 } from "lucide-react"
 import SettingsToggle from "@/components/SettingsToggle"
 import { useI18n } from "@/components/I18nProvider"
@@ -32,6 +33,7 @@ export default function Sidebar({ mobile, role = "VIEWER" }: { mobile?: boolean;
     { name: "Financial Reports", href: "/reporting", icon: FileSpreadsheet },
     { name: "Security Audit", href: "/audit", icon: History },
     { name: "Staff & Users", href: "/users", icon: Users },
+    { name: "Admin Settings", href: "/admin", icon: Settings },
   ]
 
   const links = allLinks.filter(link => {
