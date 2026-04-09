@@ -13,7 +13,8 @@ import {
   History, 
   Users,
   LogOut,
-  Settings
+  Settings,
+  Clock
 } from "lucide-react"
 import SettingsToggle from "@/components/SettingsToggle"
 import { useI18n } from "@/components/I18nProvider"
@@ -25,6 +26,7 @@ export default function Sidebar({ mobile, role = "VIEWER" }: { mobile?: boolean;
 
   const allLinks = [
     { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Shift Control", href: "/shifts", icon: Clock },
     { name: "Point of Sale", href: "/pos", icon: MonitorPlay },
     { name: "Fuel Inventory", href: "/inventory", icon: Droplets },
     { name: "Supplier Refills", href: "/purchases", icon: Truck },

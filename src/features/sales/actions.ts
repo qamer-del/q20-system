@@ -32,10 +32,12 @@ export async function processSale(formData: FormData) {
 
   // 1. Extract & Validate Inputs
   const tankId = formData.get("tankId") as string
+  const pumpId = formData.get("pumpId") as string
+  const shiftId = formData.get("shiftId") as string
   const quantityString = formData.get("quantity") as string
   const paymentMethod = formData.get("paymentMethod") as string
 
-  if (!tankId) throw new Error("Validation Error: Please select a fuel tank.")
+  if (!tankId || !pumpId || !shiftId) throw new Error("Validation Error: Missing terminal configuration (Tank, Pump, or Shift).")
   if (!quantityString) throw new Error("Validation Error: Please enter a quantity.")
 
   // CRITICAL FIX: Enforce payment method selection
@@ -61,10 +63,15 @@ export async function processSale(formData: FormData) {
     const grossTotal = multiply(quantity, unitPrice)
     const { netAmount, vatAmount, totalAmount } = extractVatFromInclusive(grossTotal)
 
-    // 2c. Deduct Inventory
+    // 2c. Deduct Inventory & Increment Shift Expected Liters
     await tx.tank.update({
       where: { id: tankId },
       data: { currentVolume: { decrement: quantity } }
+    })
+    
+    await tx.shift.update({
+      where: { id: shiftId },
+      data: { expectedLiters: { increment: quantity } }
     })
 
     // 2d. Double-Entry Journal Entry
@@ -103,6 +110,8 @@ export async function processSale(formData: FormData) {
         paymentMethod: paymentMethod as any,
         // @ts-ignore
         userId: session.user.id,
+        pumpId,
+        shiftId,
         zatcaQrCode,
         zatcaHash: "PENDING-CLEARANCE",
         journalEntryId: journal.id,
@@ -129,6 +138,7 @@ export async function processSale(formData: FormData) {
   })
 
   revalidatePath("/pos")
+  revalidatePath("/shifts")
   revalidatePath("/dashboard")
   revalidatePath("/inventory")
   revalidatePath("/invoices")

@@ -164,6 +164,8 @@ export async function resetFullSystem(formData: FormData) {
       tanks: await tx.tank.count(),
       fuelTypes: await tx.fuelType.count(),
       suppliers: await tx.supplier.count(),
+      pumps: await tx.pump.count(),
+      shifts: await tx.shift.count()
     }
 
     // Delete in dependency order
@@ -172,6 +174,12 @@ export async function resetFullSystem(formData: FormData) {
     await tx.purchase.deleteMany({})
     await tx.ledgerTransaction.deleteMany({})
     await tx.journalEntry.deleteMany({})
+    
+    // Shifts depend on Pumps, Users
+    await tx.shift.deleteMany({})
+    // Pumps depend on Tanks
+    await tx.pump.deleteMany({})
+
     await tx.account.deleteMany({})
     await tx.tank.deleteMany({})
     await tx.fuelType.deleteMany({})
@@ -192,7 +200,7 @@ export async function resetFullSystem(formData: FormData) {
         type: "FULL_SYSTEM",
         performedById: (session as any).user.id,
         reason: (formData.get("reason") as string) || "No reason provided",
-        details: `NUCLEAR RESET: Deleted ${counts.sales} sales, ${counts.purchases} purchases, ${counts.journals} journals, ${counts.accounts} accounts, ${counts.tanks} tanks, ${counts.fuelTypes} fuel types, ${counts.suppliers} suppliers. All non-admin users removed.`
+        details: `NUCLEAR RESET: Deleted ${counts.sales} sales, ${counts.purchases} purchases, ${counts.journals} journals, ${counts.accounts} accounts, ${counts.shifts} shifts, ${counts.pumps} pumps, ${counts.tanks} tanks, ${counts.fuelTypes} fuel types, ${counts.suppliers} suppliers. All non-admin users removed.`
       }
     })
 

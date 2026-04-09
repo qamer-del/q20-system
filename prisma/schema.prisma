@@ -27,6 +27,7 @@ model User {
 
   sales         Sale[]
   activityLogs  ActivityLog[]
+  shifts        Shift[]
 }
 
 // ==========================================
@@ -54,9 +55,63 @@ model Tank {
 
   fuelTypeId    String
   fuelType      FuelType  @relation(fields: [fuelTypeId], references: [id])
+  pumps         Pump[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+// ==========================================
+// Pumps & Shifts Management
+// ==========================================
+enum PumpStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+model Pump {
+  id            String    @id @default(cuid())
+  name          String    // e.g., "Pump 1", "Pump 2"
+  status        PumpStatus @default(ACTIVE)
+
+  tankId        String
+  tank          Tank      @relation(fields: [tankId], references: [id])
+
+  meterReading  Float     @default(0) // Lifetime total liters dispensed
+  
+  shifts        Shift[]
+  sales         Sale[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+model Shift {
+  id              String      @id @default(cuid())
+  status          ShiftStatus @default(OPEN)
+  
+  userId          String      
+  user            User        @relation(fields: [userId], references: [id])
+
+  pumpId          String
+  pump            Pump        @relation(fields: [pumpId], references: [id])
+
+  openingMeter    Float       
+  closingMeter    Float?      
+  
+  expectedLiters  Float       @default(0) 
+  actualLiters    Float?      
+
+  sales           Sale[]
+
+  openedAt        DateTime    @default(now())
+  closedAt        DateTime?
 }
 
 // ==========================================
@@ -77,6 +132,13 @@ model Sale {
 
   userId        String    // Cashier who made the sale
   user          User      @relation(fields: [userId], references: [id])
+  
+  pumpId        String?
+  pump          Pump?     @relation(fields: [pumpId], references: [id])
+
+  shiftId       String?
+  shift         Shift?    @relation(fields: [shiftId], references: [id])
+
   items         SaleItem[]
 
   // ZATCA specific fields (Phase 2)
