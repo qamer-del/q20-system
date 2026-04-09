@@ -9,10 +9,10 @@ import { roundSAR, multiply, extractVatFromInclusive } from "@/lib/financial"
 // Account Seeding for Purchases
 // =============================================
 async function getOrSeedPurchaseAccounts(tx: any) {
-  const cash = await tx.account.upsert({ where: { code: "1001" }, update: {}, create: { code: "1001", name: "Cash on Hand", type: "ASSET" }})
-  const bank = await tx.account.upsert({ where: { code: "1002" }, update: {}, create: { code: "1002", name: "Bank Account", type: "ASSET" }})
-  const cogs = await tx.account.upsert({ where: { code: "5001" }, update: {}, create: { code: "5001", name: "Cost of Fuel Purchased", type: "EXPENSE" }})
-  const vatInput = await tx.account.upsert({ where: { code: "1004" }, update: {}, create: { code: "1004", name: "VAT Input Tax (Receivable)", type: "ASSET" }})
+  const cash = await tx.account.upsert({ where: { code: "1001" }, update: {}, create: { code: "1001", name: "Cash on Hand", type: "ASSET" } })
+  const bank = await tx.account.upsert({ where: { code: "1002" }, update: {}, create: { code: "1002", name: "Bank Account", type: "ASSET" } })
+  const cogs = await tx.account.upsert({ where: { code: "5001" }, update: {}, create: { code: "5001", name: "Cost of Fuel Purchased", type: "EXPENSE" } })
+  const vatInput = await tx.account.upsert({ where: { code: "1004" }, update: {}, create: { code: "1004", name: "VAT Input Tax (Receivable)", type: "ASSET" } })
   return { cash, bank, cogs, vatInput }
 }
 
@@ -22,7 +22,7 @@ async function getOrSeedPurchaseAccounts(tx: any) {
 export async function addSupplier(formData: FormData) {
   const session = await auth()
   // @ts-ignore
-  if (session?.user?.role !== "ADMIN" && session?.user?.role !== "ACCOUNTANT") throw new Error("Unauthorized")
+  if (session?.user?.role !== "ADMIN" && session?.user?.role !== "MANAGER") throw new Error("Unauthorized")
 
   const name = formData.get("name") as string
   const vatNumber = formData.get("vatNumber") as string
@@ -49,7 +49,7 @@ export async function addSupplier(formData: FormData) {
 export async function editSupplier(formData: FormData) {
   const session = await auth()
   // @ts-ignore
-  if (session?.user?.role !== "ADMIN" && session?.user?.role !== "ACCOUNTANT") throw new Error("Unauthorized")
+  if (session?.user?.role !== "ADMIN" && session?.user?.role !== "MANAGER") throw new Error("Unauthorized")
 
   const supplierId = formData.get("id") as string
   if (!supplierId) throw new Error("Supplier ID is required.")
@@ -74,7 +74,7 @@ export async function editSupplier(formData: FormData) {
 export async function processRefillPurchase(formData: FormData) {
   const session = await auth()
   // @ts-ignore
-  if (!session?.user?.id || (session.user.role !== "ADMIN" && session.user.role !== "ACCOUNTANT")) {
+  if (!session?.user?.id || (session.user.role !== "ADMIN" && session.user.role !== "MANAGER")) {
     throw new Error("Unauthorized: Only Admin or Accountant can process purchases.")
   }
 

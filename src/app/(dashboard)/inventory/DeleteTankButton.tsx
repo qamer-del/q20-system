@@ -2,40 +2,35 @@
 
 import { deleteTank } from "@/features/inventory/actions"
 import { Trash2 } from "lucide-react"
-import { toast } from "sonner"
+import ActionForm from "@/components/ActionForm"
+import SubmitButton from "@/components/SubmitButton"
 
 export default function DeleteTankButton({ tankId }: { tankId: string }) {
-  const handleDelete = async (formData: FormData) => {
-    const res = await deleteTank(formData)
-    if (res?.error) {
-      toast.error(res.error, {
-        duration: 6000,
-        style: { border: "1px solid #ef4444", background: "#fef2f2", color: "#b91c1c" }
-      })
-    } else {
-      toast.success("Tank deleted successfully")
+  const safetyConfirm = (formData: FormData) => {
+    if (!confirm("Are you sure you want to delete this tank? This cannot be undone.")) {
+      return;
     }
+    return deleteTank(formData).then(res => {
+      if (res?.error) throw new Error(res.error);
+      return res;
+    });
   }
 
   return (
-    <form
-      action={handleDelete}
+    <ActionForm
+      action={safetyConfirm}
+      successMessage="Tank deleted successfully"
       className="ml-3"
-      onSubmit={(e) => {
-        if (!confirm("Are you sure you want to delete this tank? This cannot be undone.")) {
-          e.preventDefault();
-        }
-      }}
     >
       <input type="hidden" name="tankId" value={tankId} />
-      <button
-        type="submit"
-        className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
+      <SubmitButton
+        variant="ghost"
+        className="p-2 h-auto text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
         title="Delete Tank"
       >
         <Trash2 className="w-4 h-4" />
-      </button>
-    </form>
+      </SubmitButton>
+    </ActionForm>
   )
 }
 

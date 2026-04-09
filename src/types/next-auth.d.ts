@@ -2,7 +2,7 @@ import "next-auth"
 import type { DefaultSession } from "next-auth"
 
 // Define the Role enum for strict typing
-export type Role = "ADMIN" | "ACCOUNTANT" | "CASHIER" | "VIEWER"
+export type Role = "ADMIN" | "MANAGER" | "CASHIER"
 
 declare module "next-auth" {
   interface Session {

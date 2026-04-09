@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { protectRoute } from "@/lib/protect"
 import { reconcileTank, deleteTank } from "@/features/inventory/actions"
 import { Droplets, AlertTriangle, Layers, Plus, Trash2 } from "lucide-react"
 import { cookies } from "next/headers"
@@ -9,6 +10,8 @@ import HardwareSetupForms from "./HardwareSetupForms"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import ActionForm from "@/components/ActionForm"
+import SubmitButton from "@/components/SubmitButton"
 
 async function getTranslation() {
   const cookieStore = await cookies()
@@ -17,6 +20,7 @@ async function getTranslation() {
 }
 
 export default async function InventoryPage() {
+  await protectRoute(["ADMIN", "MANAGER"])
   const dict = await getTranslation()
   const fuelTypes = await prisma.fuelType.findMany()
   const tanks = await prisma.tank.findMany({
@@ -26,13 +30,13 @@ export default async function InventoryPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 lg:p-12">
       <div className="max-w-7xl mx-auto space-y-10">
-        
+
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 md:mb-8">
           <h1 className="text-2xl md:text-5xl font-black text-slate-900 dark:text-white flex items-center gap-3 md:gap-4 tracking-tight glass-title shadow-sm">
-             <div className="p-3 bg-cyan-100 dark:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400 rounded-2xl">
-               <Layers className="w-8 h-8" />
-             </div>
-             {(dict.Inventory as any).title}
+            <div className="p-3 bg-cyan-100 dark:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400 rounded-2xl">
+              <Layers className="w-8 h-8" />
+            </div>
+            {(dict.Inventory as any).title}
           </h1>
         </div>
 
@@ -60,41 +64,41 @@ export default async function InventoryPage() {
                       </span>
                     ) : (
                       <span className="bg-emerald-50 border border-emerald-200 text-emerald-600 dark:bg-emerald-900/20 dark:border-emerald-900 dark:text-emerald-400 text-[10px] uppercase tracking-widest font-black px-3 py-1.5 rounded-full shadow-sm">
-                         {(dict.Inventory as any).safe}
+                        {(dict.Inventory as any).safe}
                       </span>
                     )}
-                    
+
                     {/* DELETE TANK ACTION */}
                     <DeleteTankButton tankId={tank.id} />
                   </div>
                 </CardHeader>
-                
+
                 <CardContent className="pt-8">
                   <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-4 mb-3 overflow-hidden shadow-inner">
-                    <div 
+                    <div
                       className={`h-full rounded-full transition-all duration-1000 ${isLowStock ? 'bg-rose-500' : 'bg-emerald-400'}`}
                       style={{ width: `${Math.min(fillPercentage, 100)}%` }}
                     />
                   </div>
-                  
+
                   <div className="flex font-mono text-sm justify-between">
                     <span className="font-bold text-slate-900 dark:text-white">{tank.currentVolume.toLocaleString()} L</span>
-                    <span className="font-bold text-slate-400">{tank.capacity.toLocaleString()} L MAX</span>
+                    <span className="font-bold text-slate-400">{tank.capacity.toLocaleString()} L {(dict.Inventory as any).max}</span>
                   </div>
 
-                  <form action={reconcileTank} className="mt-8 flex gap-3 pt-6 border-t border-dashed border-slate-200 dark:border-slate-800 relative">
+                  <ActionForm action={reconcileTank} successMessage="Inventory reconciled successfully!" className="mt-8 flex gap-3 pt-6 border-t border-dashed border-slate-200 dark:border-slate-800 relative">
                     <input type="hidden" name="tankId" value={tank.id} />
-                    <Input 
-                      type="number" 
-                      name="actualVolume" 
-                      placeholder="Physical Reading (Liters)" 
+                    <Input
+                      type="number"
+                      name="actualVolume"
+                      placeholder={(dict.Inventory as any).physical_reading}
                       className="flex-1 font-mono tracking-wider bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 font-bold"
                       required
                     />
-                    <Button type="submit" variant="outline" className="shrink-0 uppercase tracking-widest text-xs h-12">
-                      Reconcile
-                    </Button>
-                  </form>
+                    <SubmitButton variant="outline" className="shrink-0 uppercase tracking-widest text-xs h-12">
+                      {(dict.Inventory as any).reconcile}
+                    </SubmitButton>
+                  </ActionForm>
                 </CardContent>
               </Card>
             )
@@ -103,17 +107,17 @@ export default async function InventoryPage() {
 
         {/* --- SYSTEM SETUP FORMS (Usually hidden in a modal, shown here for testing) --- */}
         <div className="pt-12">
-           <Card className="border-t-4 border-t-slate-800 dark:border-t-slate-700">
-             <CardHeader className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-               <CardTitle>Hardware Registry</CardTitle>
-               <CardDescription>Install new underground tanks and map exact fuel variants.</CardDescription>
-             </CardHeader>
+          <Card className="border-t-4 border-t-slate-800 dark:border-t-slate-700">
+            <CardHeader className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+              <CardTitle>{(dict.Inventory as any).hardware_registry}</CardTitle>
+              <CardDescription>{(dict.Inventory as any).hardware_desc}</CardDescription>
+            </CardHeader>
 
 // ...
-             <CardContent className="pt-8">
-               <HardwareSetupForms fuelTypes={fuelTypes} tanks={tanks} />
-             </CardContent>
-           </Card>
+            <CardContent className="pt-8">
+              <HardwareSetupForms fuelTypes={fuelTypes} tanks={tanks} />
+            </CardContent>
+          </Card>
         </div>
 
       </div>

@@ -84,7 +84,7 @@ export async function addTank(formData: FormData) {
 export async function reconcileTank(formData: FormData) {
   const session = await auth()
   // @ts-ignore
-  if (session?.user?.role !== "ADMIN" && session?.user?.role !== "ACCOUNTANT") {
+  if (session?.user?.role !== "ADMIN" && session?.user?.role !== "MANAGER") {
     throw new Error("Unauthorized")
   }
 

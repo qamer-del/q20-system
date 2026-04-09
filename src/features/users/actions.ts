@@ -15,7 +15,7 @@ export async function createUser(formData: FormData) {
   const name = formData.get("name") as string
   const email = formData.get("email") as string
   const rawPassword = formData.get("password") as string
-  const role = formData.get("role") as "ADMIN" | "CASHIER" | "ACCOUNTANT"
+  const role = formData.get("role") as "ADMIN" | "MANAGER" | "CASHIER"
 
   // Check if email already exists
   const existing = await prisma.user.findUnique({ where: { email } })
@@ -27,7 +27,7 @@ export async function createUser(formData: FormData) {
   await prisma.user.create({
     data: { name, email, password: hashedPassword, role }
   })
-  
+
   // Log action
   await prisma.activityLog.create({
     data: {
@@ -48,12 +48,12 @@ export async function deleteUser(formData: FormData) {
   }
 
   const targetUserId = formData.get("userId") as string
-  
+
   if (targetUserId === session.user.id) {
     throw new Error("You cannot delete your own active Admin account!")
   }
 
-  const targetUser = await prisma.user.findUnique({ where: { id: targetUserId }})
+  const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } })
   if (!targetUser) throw new Error("User not found")
 
   await prisma.user.delete({ where: { id: targetUserId } })

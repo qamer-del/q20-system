@@ -12,9 +12,8 @@ datasource db {
 // ==========================================
 enum Role {
   ADMIN
-  ACCOUNTANT
+  MANAGER
   CASHIER
-  VIEWER
 }
 
 model User {
@@ -22,7 +21,7 @@ model User {
   name          String?
   email         String?   @unique
   password      String?
-  role          Role      @default(VIEWER)
+  role          Role      @default(CASHIER)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -108,6 +107,10 @@ model Shift {
   
   expectedLiters  Float       @default(0) 
   actualLiters    Float?      
+
+  // Financial Reconciliation
+  actualCash      Float?      
+  actualBank      Float?      
 
   sales           Sale[]
 

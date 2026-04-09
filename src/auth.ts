@@ -26,12 +26,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const { email, password } = parsedCredentials.data
           const user = await prisma.user.findUnique({ where: { email } })
           if (!user || !user.password) return null
-          
+
           // Verify password securely using bcrypt
           const passwordsMatch = await bcrypt.compare(password, user.password)
           if (passwordsMatch) return { id: user.id, email: user.email, name: user.name, role: user.role }
         }
-        
+
         return null
       }
     })
@@ -43,13 +43,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // @ts-ignore
         token.role = user.role
         token.id = user.id
+        token.sub = user.id // Ensure sub is consistent with our custom id
       }
       return token
     },
     // 2. Pass Role and User ID from the token into NextAuth session
     async session({ session, token }) {
-      if (token?.sub) {
-        session.user.id = token.sub
+      if (token?.id || token?.sub) {
+        session.user.id = (token.id || token.sub) as string
       }
       if (token?.role) {
         // @ts-ignore

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { protectRoute } from "@/lib/protect"
 import { Calculator, TrendingUp, HandCoins, Building, FileSpreadsheet, Receipt, Info } from "lucide-react"
 import { cookies } from "next/headers"
 import enDict from "../../../../messages/en.json"
@@ -14,6 +15,7 @@ async function getTranslation() {
 }
 
 export default async function ReportingPage() {
+  await protectRoute(["ADMIN", "MANAGER"])
   const dict = await getTranslation()
   const accountsData = await prisma.account.findMany({
     include: { transactions: true }
@@ -77,7 +79,7 @@ export default async function ReportingPage() {
             <div className="p-3 bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400 rounded-2xl">
               <FileSpreadsheet className="w-8 h-8" />
             </div>
-            System Analytics & Reports
+            {(dict.Reporting as any).title}
           </h1>
           <PrintButton />
         </div>
@@ -96,9 +98,9 @@ export default async function ReportingPage() {
               <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase text-[10px] font-bold tracking-widest">
-                    <th className="p-4">Pump ID</th>
-                    <th className="p-4">Lifetime Liters Dispensed</th>
-                    <th className="p-4">Connected Tank</th>
+                    <th className="p-4">{(dict.Reporting as any).pump_id}</th>
+                    <th className="p-4">{(dict.Reporting as any).lifetime_liters}</th>
+                    <th className="p-4">{(dict.Reporting as any).connected_tank}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -110,7 +112,7 @@ export default async function ReportingPage() {
                     </tr>
                   ))}
                   {pumpsAnalytics.length === 0 && (
-                    <tr><td colSpan={3} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">No Pumps Registered</td></tr>
+                    <tr><td colSpan={3} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">{(dict.Reporting as any).no_pumps}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -128,9 +130,9 @@ export default async function ReportingPage() {
               <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase text-[10px] font-bold tracking-widest">
-                    <th className="p-4">Fuel Grade</th>
-                    <th className="p-4">Total Sold (Liters)</th>
-                    <th className="p-4">Gross Revenue</th>
+                    <th className="p-4">{(dict.Reporting as any).fuel_grade}</th>
+                    <th className="p-4">{(dict.Reporting as any).total_sold}</th>
+                    <th className="p-4">{(dict.Reporting as any).gross_revenue}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -207,7 +209,7 @@ export default async function ReportingPage() {
                       <span>SAR {r.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
                   ))}
-                  {revenues.length === 0 && <p className="text-slate-400 italic">No revenue recorded</p>}
+                  {revenues.length === 0 && <p className="text-slate-400 italic">{(dict.Reporting as any).no_revenue}</p>}
                   <div className="flex justify-between font-black text-slate-900 dark:text-white mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
                     <span className="font-sans">{(dict.General as any).total}</span>
                     <span>SAR {totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
@@ -224,7 +226,7 @@ export default async function ReportingPage() {
                       <span>SAR {e.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
                   ))}
-                  {expenses.length === 0 && <p className="text-slate-400 italic">No expenses recorded</p>}
+                  {expenses.length === 0 && <p className="text-slate-400 italic">{(dict.Reporting as any).no_expenses}</p>}
                   <div className="flex justify-between font-black text-slate-900 dark:text-white mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
                     <span className="font-sans">{(dict.General as any).total}</span>
                     <span>SAR {totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
@@ -283,7 +285,7 @@ export default async function ReportingPage() {
                   {/* Retained Earnings (Net Income) */}
                   {netIncome !== 0 && (
                     <div className="flex justify-between text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg">
-                      <span className="font-sans font-bold italic">Retained Earnings (YTD)</span>
+                      <span className="font-sans font-bold italic">{(dict.Reporting as any).retained_earnings}</span>
                       <span>SAR {netIncome.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
                   )}
@@ -297,11 +299,11 @@ export default async function ReportingPage() {
               <div className="mt-8 pt-6 border-t font-mono border-dashed border-slate-300 dark:border-slate-800">
                 {roundSAR(totalAssets) !== roundSAR(totalLiabilities + totalEquityWithRetained) ? (
                   <p className="text-[10px] text-rose-500 text-center font-bold tracking-widest uppercase border border-rose-200 bg-rose-50 p-3 rounded-xl dark:bg-rose-900/20 dark:border-rose-900">
-                    Ledger Out of Balance. Verify Journal Entries.
+                    {(dict.Reporting as any).ledger_unbalanced}
                   </p>
                 ) : (
                   <p className="text-[10px] text-emerald-500 text-center font-bold tracking-widest uppercase border border-emerald-200 bg-emerald-50 p-3 rounded-xl dark:bg-emerald-900/20 dark:border-emerald-900">
-                    ✓ Assets = Liabilities + Equity — Ledger Balanced
+                    {(dict.Reporting as any).ledger_balanced}
                   </p>
                 )}
               </div>
@@ -318,7 +320,7 @@ export default async function ReportingPage() {
                 <Calculator className="text-amber-400 w-6 h-6" /> {(dict.Reporting as any).zakat_report}
               </CardTitle>
               <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-2">
-                ZATCA Simplified Method (صافي الأصول المتداولة)
+                {(dict.Reporting as any).zatca_method}
               </p>
             </CardHeader>
 
@@ -327,14 +329,14 @@ export default async function ReportingPage() {
 
                 {/* Zakatable Base Breakdown */}
                 <div className="bg-slate-800/50 rounded-xl p-4 space-y-3 border border-slate-700/50">
-                  <p className="text-[10px] text-amber-400 uppercase tracking-widest font-black mb-3">مصادر الوعاء الزكوي — Zakatable Base Components</p>
+                  <p className="text-[10px] text-amber-400 uppercase tracking-widest font-black mb-3">{(dict.Reporting as any).zakat_base_desc}</p>
 
                   <div className="flex justify-between border-b border-slate-700/30 pb-2">
-                    <span className="text-slate-400 font-sans text-[10px] uppercase">Current Assets (Cash + Bank + VAT Receivable)</span>
+                    <span className="text-slate-400 font-sans text-[10px] uppercase">{(dict.Reporting as any).zakat_current_assets}</span>
                     <span className="text-white">SAR {zakatData.currentAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-700/30 pb-2">
-                    <span className="text-slate-400 font-sans text-[10px] uppercase">(Less) Current Liabilities (VAT Payable)</span>
+                    <span className="text-slate-400 font-sans text-[10px] uppercase">{(dict.Reporting as any).zakat_current_liabilities}</span>
                     <span className="text-rose-400">- SAR {zakatData.currentLiabilities.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                   {zakatData.equity > 0 && (
@@ -344,7 +346,7 @@ export default async function ReportingPage() {
                     </div>
                   )}
                   <div className="flex justify-between pt-2">
-                    <span className="text-amber-400 font-sans text-[10px] uppercase font-black">الوعاء الزكوي (Zakatable Base)</span>
+                    <span className="text-amber-400 font-sans text-[10px] uppercase font-black">{(dict.Reporting as any).zakat_base_label}</span>
                     <span className="text-amber-400 font-black text-lg">SAR {zakatData.zakatBase.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
@@ -352,12 +354,12 @@ export default async function ReportingPage() {
                 {/* Rate Information */}
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-3 text-center">
-                    <span className="block text-[9px] text-slate-500 uppercase tracking-widest mb-1">Hijri Year Rate</span>
+                    <span className="block text-[9px] text-slate-500 uppercase tracking-widest mb-1">{(dict.Reporting as any).hijri_rate}</span>
                     <span className="font-black text-white">2.5%</span>
                     <span className="block text-amber-400 font-mono mt-1">SAR {zakatData.zakatDueHijri.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="bg-slate-800/30 border border-amber-900/50 rounded-lg p-3 text-center">
-                    <span className="block text-[9px] text-slate-500 uppercase tracking-widest mb-1">Gregorian Year Rate</span>
+                    <span className="block text-[9px] text-slate-500 uppercase tracking-widest mb-1">{(dict.Reporting as any).gregorian_rate}</span>
                     <span className="font-black text-amber-400">≈2.578%</span>
                     <span className="block text-amber-400 font-mono mt-1">SAR {zakatData.zakatDueGregorian.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </div>
@@ -365,14 +367,14 @@ export default async function ReportingPage() {
 
                 {/* Final Zakat Owed */}
                 <div className="mt-6 bg-slate-800/80 border border-slate-700 rounded-2xl p-6 relative z-10 text-center backdrop-blur-md shadow-inner">
-                  <span className="block text-[10px] uppercase tracking-widest text-slate-400 mb-2 font-black">الزكاة المستحقة — Estimated Zakat Due</span>
+                  <span className="block text-[10px] uppercase tracking-widest text-slate-400 mb-2 font-black">{(dict.Reporting as any).estimated_zakat_due}</span>
                   <span className="text-4xl font-black text-amber-400 tracking-tighter">SAR {zakatData.zakatOwed.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  <span className="block text-[9px] text-slate-500 mt-2 uppercase tracking-widest">Based on Gregorian calendar (365 days)</span>
+                  <span className="block text-[9px] text-slate-500 mt-2 uppercase tracking-widest">{(dict.Reporting as any).gregorian_desc}</span>
                 </div>
               </div>
 
               <p className="text-[9px] text-slate-500 text-center mt-6 uppercase tracking-widest font-bold">
-                هيئة الزكاة والضريبة والجمارك — Saudi General Authority of Zakat, Tax & Customs
+                {(dict.Reporting as any).zatca_zakat}
               </p>
             </CardContent>
           </Card>

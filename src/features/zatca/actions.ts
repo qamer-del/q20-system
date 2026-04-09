@@ -8,7 +8,7 @@ import { auth } from "@/auth"
 export async function submitInvoiceToZatca(invoiceId: string) {
   const session = await auth()
   // @ts-ignore
-  if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "ACCOUNTANT")) {
+  if (!session?.user || (session.user.role !== "ADMIN" && session.user.role !== "MANAGER")) {
     throw new Error("Unauthorized")
   }
 

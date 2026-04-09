@@ -11,7 +11,7 @@ import { roundSAR } from "@/lib/financial"
 export async function addAccount(formData: FormData) {
   const session = await auth()
   // @ts-ignore
-  if (session?.user?.role !== "ADMIN" && session?.user?.role !== "ACCOUNTANT") throw new Error("Unauthorized")
+  if (session?.user?.role !== "ADMIN" && session?.user?.role !== "MANAGER") throw new Error("Unauthorized")
 
   const code = (formData.get("code") as string)?.trim()
   const name = (formData.get("name") as string)?.trim()
@@ -50,7 +50,7 @@ export async function addAccount(formData: FormData) {
 export async function postJournalEntry(formData: FormData) {
   const session = await auth()
   // @ts-ignore
-  if (session?.user?.role !== "ADMIN" && session?.user?.role !== "ACCOUNTANT") throw new Error("Unauthorized")
+  if (session?.user?.role !== "ADMIN" && session?.user?.role !== "MANAGER") throw new Error("Unauthorized")
 
   const description = (formData.get("description") as string)?.trim()
   const debitAccountId = formData.get("debitAccountId") as string

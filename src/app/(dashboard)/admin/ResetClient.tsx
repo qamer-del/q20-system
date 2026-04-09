@@ -6,36 +6,39 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ShieldAlert, Trash2, AlertTriangle, Loader2, Lock, CheckCircle2, XCircle } from "lucide-react"
+import { useI18n } from "@/components/I18nProvider"
+import ActionForm from "@/components/ActionForm"
+import SubmitButton from "@/components/SubmitButton"
 
 type ResetLevel = "invoices" | "financial" | "full" | null
 
 export default function ResetClient() {
+  const { t } = useI18n()
   const [step, setStep] = useState<number>(0) // 0=choose, 1=warning, 2=confirm
   const [level, setLevel] = useState<ResetLevel>(null)
   const [password, setPassword] = useState("")
   const [confirmation, setConfirmation] = useState("")
   const [reason, setReason] = useState("")
-  const [isProcessing, setIsProcessing] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
 
   const config = {
     invoices: {
-      title: "Reset Invoices Only",
-      description: "Deletes all sales invoices and their linked journal entries. Keeps accounts, tanks, suppliers.",
+      title: t("reset_invoices"),
+      description: t("reset_invoices_desc"),
       confirmText: "RESET INVOICES",
       action: resetInvoicesOnly,
       color: "amber",
     },
     financial: {
-      title: "Reset Financial Data",
-      description: "Deletes ALL financial records: sales, purchases, journal entries. Resets tank volumes to 0. Keeps chart of accounts and users.",
+      title: t("reset_financial"),
+      description: t("reset_financial_desc"),
       confirmText: "RESET FINANCIAL",
       action: resetFinancialData,
       color: "orange",
     },
     full: {
-      title: "Full System Reset",
-      description: "⚠️ NUCLEAR OPTION — Deletes ALL data except your admin account and audit logs. This cannot be undone.",
+      title: t("reset_full"),
+      description: t("reset_full_desc"),
       confirmText: "FULL SYSTEM RESET",
       action: resetFullSystem,
       color: "rose",
@@ -44,17 +47,18 @@ export default function ResetClient() {
 
   const currentConfig = level ? config[level] : null
 
-  const handleReset = async () => {
-    if (!currentConfig || !level) return
-    setIsProcessing(true)
+  const cancel = () => {
+    setStep(0)
+    setLevel(null)
+    setPassword("")
+    setConfirmation("")
+    setReason("")
     setResult(null)
+  }
 
+  const handleResetAction = async (formData: FormData) => {
+    if (!currentConfig || !level) return
     try {
-      const formData = new FormData()
-      formData.set("password", password)
-      formData.set("confirmation", confirmation)
-      formData.set("reason", reason)
-
       await currentConfig.action(formData)
       setResult({ success: true, message: `${currentConfig.title} completed successfully.` })
       setStep(0)
@@ -64,18 +68,8 @@ export default function ResetClient() {
       setReason("")
     } catch (e: any) {
       setResult({ success: false, message: e.message })
-    } finally {
-      setIsProcessing(false)
+      throw e
     }
-  }
-
-  const cancel = () => {
-    setStep(0)
-    setLevel(null)
-    setPassword("")
-    setConfirmation("")
-    setReason("")
-    setResult(null)
   }
 
   return (
@@ -92,57 +86,39 @@ export default function ResetClient() {
       {step === 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="border-t-4 border-t-amber-500 hover:shadow-lg transition-shadow cursor-pointer group"
-                onClick={() => { setLevel("invoices"); setStep(1) }}>
+            onClick={() => { setLevel("invoices"); setStep(1) }}>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <Trash2 className="w-5 h-5 text-amber-500" /> Reset Invoices
+                <Trash2 className="w-5 h-5 text-amber-500" /> {t("reset_invoices")}
               </CardTitle>
               <CardDescription>
-                Delete all sales invoices and linked journal entries only.
+                {t("reset_invoices_desc")}
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-xs text-slate-500">
-                <strong>Deletes:</strong> Sales, SaleItems, linked JEs<br />
-                <strong>Keeps:</strong> Accounts, Tanks, Suppliers, Purchases, Users
-              </p>
-            </CardContent>
           </Card>
 
           <Card className="border-t-4 border-t-orange-500 hover:shadow-lg transition-shadow cursor-pointer group"
-                onClick={() => { setLevel("financial"); setStep(1) }}>
+            onClick={() => { setLevel("financial"); setStep(1) }}>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-orange-500" /> Reset Financial
+                <AlertTriangle className="w-5 h-5 text-orange-500" /> {t("reset_financial")}
               </CardTitle>
               <CardDescription>
-                Delete all financial records and reset tank volumes.
+                {t("reset_financial_desc")}
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-xs text-slate-500">
-                <strong>Deletes:</strong> All sales, purchases, journal entries<br />
-                <strong>Resets:</strong> Tank volumes to 0<br />
-                <strong>Keeps:</strong> Chart of Accounts, Suppliers, Users
-              </p>
-            </CardContent>
           </Card>
 
           <Card className="border-t-4 border-t-rose-500 hover:shadow-lg transition-shadow cursor-pointer group"
-                onClick={() => { setLevel("full"); setStep(1) }}>
+            onClick={() => { setLevel("full"); setStep(1) }}>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-rose-500" /> Full System Reset
+                <ShieldAlert className="w-5 h-5 text-rose-500" /> {t("reset_full")}
               </CardTitle>
               <CardDescription>
-                Delete EVERYTHING. Only your admin account survives.
+                {t("reset_full_desc")}
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-xs text-rose-500 font-bold">
-                ⚠️ This action is irreversible. All data will be permanently deleted.
-              </p>
-            </CardContent>
           </Card>
         </div>
       )}
@@ -156,18 +132,18 @@ export default function ResetClient() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
-            <p dir="ltr" className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed text-center md:text-left">
+            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed text-center md:text-left">
               {currentConfig.description}
             </p>
             <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-900 rounded-xl p-4">
-              <p dir="ltr" className="text-rose-600 dark:text-rose-400 font-bold text-sm text-center">
-                This action CANNOT be undone.<br/>All affected data will be permanently removed from the database.
+              <p className="text-rose-600 dark:text-rose-400 font-bold text-sm text-center">
+                This action CANNOT be undone.<br />All affected data will be permanently removed from the database.
               </p>
             </div>
             <div className="flex flex-col-reverse md:flex-row gap-3">
-              <Button variant="outline" onClick={cancel} className="flex-1 whitespace-nowrap">Cancel</Button>
+              <Button variant="outline" onClick={cancel} className="flex-1 whitespace-nowrap">{t("cancel")}</Button>
               <Button onClick={() => setStep(2)} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white whitespace-nowrap overflow-hidden text-ellipsis">
-                I Understand, Continue
+                {t("understand_continue")}
               </Button>
             </div>
           </CardContent>
@@ -176,64 +152,68 @@ export default function ResetClient() {
 
       {/* Step 2: Password + Confirmation */}
       {step === 2 && currentConfig && (
-        <Card className="border-2 border-rose-500 shadow-2xl max-w-xl mx-auto">
-          <CardHeader className="bg-slate-900 text-white border-b border-slate-700">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Lock className="w-5 h-5 text-amber-400" /> Security Verification
-            </CardTitle>
-            <CardDescription className="text-slate-400">
-              Complete all fields to authorize: <strong className="text-rose-400">{currentConfig.title}</strong>
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6 space-y-5">
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Reason for Reset</label>
-              <Input
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="e.g., End of fiscal year, data correction..."
-                required
-              />
-            </div>
+        <ActionForm action={handleResetAction} className="max-w-xl mx-auto">
+          <Card className="border-2 border-rose-500 shadow-2xl">
+            <CardHeader className="bg-slate-900 text-white border-b border-slate-700">
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Lock className="w-5 h-5 text-amber-400" /> {t("security_verif")}
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                Complete all fields to authorize: <strong className="text-rose-400">{currentConfig.title}</strong>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-5">
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">{t("reset_reason_label")}</label>
+                <Input
+                  name="reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g., End of fiscal year..."
+                  required
+                />
+              </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                Admin Password
-              </label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Re-enter your password"
-                required
-              />
-            </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                  {t("admin_password")}
+                </label>
+                <Input
+                  type="password"
+                  name="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Re-enter your password"
+                  required
+                />
+              </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                Type <span className="text-rose-600 font-black">{currentConfig.confirmText}</span> to confirm
-              </label>
-              <Input
-                value={confirmation}
-                onChange={(e) => setConfirmation(e.target.value)}
-                placeholder={currentConfig.confirmText}
-                className="font-mono text-center text-lg"
-                required
-              />
-            </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                  {t("confirm_text_label").replace("{text}", currentConfig.confirmText)}
+                </label>
+                <Input
+                  name="confirmation"
+                  value={confirmation}
+                  onChange={(e) => setConfirmation(e.target.value)}
+                  placeholder={currentConfig.confirmText}
+                  className="font-mono text-center text-lg"
+                  required
+                />
+              </div>
 
-            <div className="flex flex-col-reverse md:flex-row gap-3 pt-4">
-              <Button variant="outline" onClick={cancel} className="flex-1">Cancel</Button>
-              <Button
-                onClick={handleReset}
-                disabled={isProcessing || !password || confirmation !== currentConfig.confirmText}
-                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50"
-              >
-                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : `Execute ${currentConfig.title}`}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="flex flex-col-reverse md:flex-row gap-3 pt-4">
+                <Button type="button" variant="outline" onClick={cancel} className="flex-1">{t("cancel")}</Button>
+                <SubmitButton
+                  disabled={!password || confirmation !== currentConfig.confirmText}
+                  className="flex-1 bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50"
+                >
+                  {`Execute ${currentConfig.title}`}
+                </SubmitButton>
+              </div>
+            </CardContent>
+          </Card>
+        </ActionForm>
       )}
     </div>
   )
