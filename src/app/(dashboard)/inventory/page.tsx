@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/prisma"
-import { addFuelType, addTank, reconcileTank, deleteTank } from "@/features/inventory/actions"
-import { addPump } from "@/features/shifts/actions"
+import { reconcileTank, deleteTank } from "@/features/inventory/actions"
 import { Droplets, AlertTriangle, Layers, Plus, Trash2 } from "lucide-react"
 import { cookies } from "next/headers"
 import enDict from "../../../../messages/en.json"
 import arDict from "../../../../messages/ar.json"
 import DeleteTankButton from "./DeleteTankButton"
+import HardwareSetupForms from "./HardwareSetupForms"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -110,40 +110,8 @@ export default async function InventoryPage() {
              </CardHeader>
 
 // ...
-             <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-8">
-               
-               <form action={addFuelType} className="space-y-5">
-                 <h4 className="font-bold text-sm tracking-widest text-slate-400 uppercase border-b border-slate-100 dark:border-slate-800 pb-3">1. Add Fuel Grade</h4>
-                 <Input type="text" name="name" placeholder="Name (e.g. Super 98)" required />
-                 <Input type="text" name="code" placeholder="Code (e.g. S98)" required />
-                 <Input type="number" step="0.01" name="price" placeholder="Price per Liter (SAR)" required />
-                 <Button type="submit" variant="primary" className="w-full mt-2"><Plus className="w-5 h-5 mr-2" /> Register Grade</Button>
-               </form>
-
-               <form action={addTank} className="space-y-5">
-                 <h4 className="font-bold text-sm tracking-widest text-slate-400 uppercase border-b border-slate-100 dark:border-slate-800 pb-3">2. Add Underground Tank</h4>
-                 <Input type="text" name="name" placeholder={(dict.Inventory as any).tank_name} required />
-                 <div className="grid grid-cols-2 gap-3">
-                    <Input type="number" name="capacity" placeholder={(dict.Inventory as any).capacity} required />
-                    <Input type="number" name="initialVolume" placeholder={(dict.Inventory as any).current_volume} required />
-                 </div>
-                 <select name="fuelTypeId" className="flex h-12 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-2 text-sm font-medium transition-all" required>
-                   <option value="">Select a Fuel Grade...</option>
-                   {fuelTypes.map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                 </select>
-                 <Button type="submit" variant="secondary" className="w-full mt-2"><Droplets className="w-5 h-5 mr-2" /> Register Tank</Button>
-               </form>
-
-               <form action={addPump} className="space-y-5">
-                 <h4 className="font-bold text-sm tracking-widest text-slate-400 uppercase border-b border-slate-100 dark:border-slate-800 pb-3">3. Add Terminal Pump</h4>
-                 <Input type="text" name="name" placeholder="Pump Designation (e.g. Pump 1)" required />
-                 <select name="tankId" className="flex h-12 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-2 text-sm font-medium transition-all" required>
-                   <option value="">Connect to Tank...</option>
-                   {tanks.map((t: any) => <option key={t.id} value={t.id}>{t.name} ({t.fuelType.code})</option>)}
-                 </select>
-                 <Button type="submit" variant="default" className="w-full mt-2 bg-slate-900 border"><Droplets className="w-5 h-5 mr-2 text-blue-500" /> Register Pump</Button>
-               </form>
-
+             <CardContent className="pt-8">
+               <HardwareSetupForms fuelTypes={fuelTypes} tanks={tanks} />
              </CardContent>
            </Card>
         </div>
