@@ -15,10 +15,10 @@ import { generateZatcaTlvBase64 } from "@/features/zatca/engine"
 // Centralized Account Seeding (called once per tx)
 // =============================================
 async function getOrSeedAccounts(tx: any) {
-  const cash = await tx.account.upsert({ where: { code: "1001" }, update: {}, create: { code: "1001", name: "Cash on Hand", type: "ASSET" }})
-  const bank = await tx.account.upsert({ where: { code: "1002" }, update: {}, create: { code: "1002", name: "Bank Account", type: "ASSET" }})
-  const sales = await tx.account.upsert({ where: { code: "4001" }, update: {}, create: { code: "4001", name: "Sales Revenue", type: "REVENUE" }})
-  const vatPayable = await tx.account.upsert({ where: { code: "2001" }, update: {}, create: { code: "2001", name: "VAT Payable (ZATCA 15%)", type: "LIABILITY" }})
+  const cash = await tx.account.upsert({ where: { code: "1001" }, update: {}, create: { code: "1001", name: "Cash on Hand", type: "ASSET" } })
+  const bank = await tx.account.upsert({ where: { code: "1002" }, update: {}, create: { code: "1002", name: "Bank Account", type: "ASSET" } })
+  const sales = await tx.account.upsert({ where: { code: "4001" }, update: {}, create: { code: "4001", name: "Sales Revenue", type: "REVENUE" } })
+  const vatPayable = await tx.account.upsert({ where: { code: "2001" }, update: {}, create: { code: "2001", name: "VAT Payable (ZATCA 15%)", type: "LIABILITY" } })
   return { cash, bank, sales, vatPayable }
 }
 
@@ -68,7 +68,7 @@ export async function processSale(formData: FormData) {
       where: { id: tankId },
       data: { currentVolume: { decrement: quantity } }
     })
-    
+
     await tx.shift.update({
       where: { id: shiftId },
       data: { expectedLiters: { increment: quantity } }
@@ -100,8 +100,8 @@ export async function processSale(formData: FormData) {
       vatAmount.toFixed(2)
     )
 
-    // 2f. Create Sale Record
-    await tx.sale.create({
+    // 2f. Create Sale Record (Split to avoid nested write bugs in Prisma Pg driver adapter)
+    const sale = await tx.sale.create({
       data: {
         invoiceNumber: generateInvoiceNumber("INV"),
         totalAmount,
@@ -114,15 +114,17 @@ export async function processSale(formData: FormData) {
         shiftId,
         zatcaQrCode,
         zatcaHash: "PENDING-CLEARANCE",
-        journalEntryId: journal.id,
-        items: {
-          create: [{
-            fuelTypeId: tank.fuelTypeId,
-            quantity,
-            unitPrice,
-            totalPrice: totalAmount
-          }]
-        }
+        journalEntryId: journal.id
+      }
+    })
+
+    await tx.saleItem.create({
+      data: {
+        saleId: sale.id,
+        fuelTypeId: tank.fuelTypeId,
+        quantity,
+        unitPrice,
+        totalPrice: totalAmount
       }
     })
 

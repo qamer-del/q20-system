@@ -96,7 +96,7 @@ export async function reconcileTank(formData: FormData) {
   const actualPhysicalVolume = parseFloat(actualStr)
   if (isNaN(actualPhysicalVolume) || actualPhysicalVolume < 0) throw new Error("Actual volume must be zero or positive.")
 
-  const tank = await prisma.tank.findUnique({ where: { id: tankId }})
+  const tank = await prisma.tank.findUnique({ where: { id: tankId } })
   if (!tank) throw new Error("Tank not found.")
 
   if (actualPhysicalVolume > tank.capacity) throw new Error(`Volume ${actualPhysicalVolume}L exceeds tank capacity ${tank.capacity}L.`)
@@ -123,29 +123,41 @@ export async function reconcileTank(formData: FormData) {
 // 4. Delete Tank
 // ------------------------------------
 export async function deleteTank(formData: FormData) {
-  const session = await auth()
-  // @ts-ignore
-  if (session?.user?.role !== "ADMIN") throw new Error("Unauthorized")
+  try {
+    const session = await auth()
+    // @ts-ignore
+    if (session?.user?.role !== "ADMIN") throw new Error("Unauthorized")
 
-  const tankId = formData.get("tankId") as string
-  if (!tankId) throw new Error("Tank ID is required.")
+    const tankId = formData.get("tankId") as string
+    if (!tankId) throw new Error("Tank ID is required.")
 
-  const tank = await prisma.tank.findUnique({ where: { id: tankId } })
-  if (!tank) throw new Error("Tank not found.")
+    const tank = await prisma.tank.findUnique({
+      where: { id: tankId },
+      include: { pumps: true }
+    })
+    if (!tank) throw new Error("Tank not found.")
 
-  if (tank.currentVolume > 0) {
-    throw new Error(`Safety Violation: Cannot delete a tank holding ${tank.currentVolume}L. Reconcile fuel to 0L first.`)
-  }
-
-  await prisma.tank.delete({ where: { id: tankId } })
-
-  await prisma.activityLog.create({
-    data: {
-      userId: (session as any).user.id as string,
-      action: "DELETED_TANK",
-      details: `Deleted empty tank: ${tank.name} (Capacity: ${tank.capacity}L)`
+    if (tank.currentVolume > 0) {
+      return { error: `Safety Violation: Cannot delete a tank holding ${tank.currentVolume}L. Reconcile fuel to 0L first.` }
     }
-  })
 
-  revalidatePath("/inventory")
+    if (tank.pumps.length > 0) {
+      return { error: `Safety Violation: Cannot delete this tank because it has ${tank.pumps.length} pump(s) connected.` }
+    }
+
+    await prisma.tank.delete({ where: { id: tankId } })
+
+    await prisma.activityLog.create({
+      data: {
+        userId: (session as any).user.id as string,
+        action: "DELETED_TANK",
+        details: `Deleted empty tank: ${tank.name} (Capacity: ${tank.capacity}L)`
+      }
+    })
+
+    revalidatePath("/inventory")
+    return { success: true }
+  } catch (e: any) {
+    return { error: e.message }
+  }
 }
