@@ -44,7 +44,7 @@ export default async function AccountingPage() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 lg:p-12">
       <div className="max-w-7xl mx-auto space-y-10">
         
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <h1 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white flex items-center gap-4 tracking-tight glass-title shadow-sm">
              <div className="p-3 bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 rounded-2xl">
                <Landmark className="w-8 h-8" />

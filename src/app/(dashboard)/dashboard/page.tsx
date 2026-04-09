@@ -60,7 +60,7 @@ export default async function DashboardPage() {
                </div>
                {(dict.Dashboard as any).title}
             </h1>
-            <p className="text-slate-500 mt-2 text-lg">{(dict.General as any).welcome}, <span className="font-bold text-slate-700 dark:text-slate-300 capitalize">{session.user.name}</span></p>
+            <p className="text-slate-500 mt-2 text-base md:text-lg">{(dict.General as any).welcome}, <span className="font-bold text-slate-700 dark:text-slate-300 capitalize">{session.user.name}</span></p>
           </div>
         </div>
 
