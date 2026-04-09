@@ -45,6 +45,12 @@ export async function openShift(formData: FormData) {
   const pumpId = formData.get("pumpId") as string
   if (!pumpId) throw new Error("Please select a pump")
 
+  const openingMeterStr = formData.get("openingMeter") as string
+  const openingMeter = parseFloat(openingMeterStr)
+  if (isNaN(openingMeter) || openingMeter < 0) {
+    throw new Error("Please enter a valid starting meter reading.")
+  }
+
   // Check if pump is already in use by another active shift
   const existingShift = await prisma.shift.findFirst({
     where: { pumpId, status: "OPEN" }
@@ -54,27 +60,36 @@ export async function openShift(formData: FormData) {
     throw new Error("This pump is already in use by an active shift.")
   }
 
-  // Get pump's current lifetime meter reading
   const pump = await prisma.pump.findUnique({ where: { id: pumpId } })
   if (!pump) throw new Error("Pump not found")
   if (pump.status !== "ACTIVE") throw new Error("Pump is disabled or in maintenance")
 
-  await prisma.shift.create({
-    data: {
-      userId: (session as any).user.id,
-      pumpId: pump.id,
-      openingMeter: pump.meterReading,
-      expectedLiters: 0,
-      status: "OPEN"
-    }
-  })
+  await prisma.$transaction(async (tx: any) => {
+    // 1. Create Shift
+    await tx.shift.create({
+      data: {
+        userId: (session as any).user.id,
+        pumpId: pump.id,
+        openingMeter,
+        expectedLiters: 0,
+        status: "OPEN"
+      }
+    })
 
-  await prisma.activityLog.create({
-    data: {
-      userId: (session as any).user.id,
-      action: "SHIFT_OPENED",
-      details: `Started shift on ${pump.name} at meter ${pump.meterReading}L`
-    }
+    // 2. Set Pump's actual master meter to this manually inputted meter
+    await tx.pump.update({
+      where: { id: pumpId },
+      data: { meterReading: openingMeter }
+    })
+
+    // 3. Log
+    await tx.activityLog.create({
+      data: {
+        userId: (session as any).user.id,
+        action: "SHIFT_OPENED",
+        details: `Started shift on ${pump.name} at manual meter ${openingMeter}L`
+      }
+    })
   })
 
   revalidatePath("/shifts")

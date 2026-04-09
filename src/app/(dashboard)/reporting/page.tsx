@@ -19,6 +19,15 @@ export default async function ReportingPage() {
     include: { transactions: true }
   })
 
+  // Operational Analytics Data
+  const pumpsAnalytics = await prisma.pump.findMany({
+    include: { tank: { include: { fuelType: true } } }
+  })
+  const fuelTypeAnalytics = await prisma.fuelType.findMany()
+  const salesItemsData = await prisma.saleItem.findMany({
+    include: { sale: true }
+  })
+
   // Calculate all account balances using precision helpers
   const accounts = accountsData.map((account: any) => {
     const totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
@@ -68,11 +77,84 @@ export default async function ReportingPage() {
              <div className="p-3 bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400 rounded-2xl">
                <FileSpreadsheet className="w-8 h-8" />
              </div>
-             {(dict.Reporting as any).title}
+             System Analytics & Reports
           </h1>
-          <Button variant="outline" className="shadow-none hidden md:flex">
+          <Button variant="outline" className="shadow-none hidden md:flex" onClick={() => window.print()}>
              Export PDF
           </Button>
+        </div>
+
+        {/* --- OPERATIONAL & SALES ANALYTICS --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          
+          {/* Pump Performance */}
+          <Card className="border-t-4 border-t-fuchsia-500 shadow-xl">
+             <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="text-xl font-black flex items-center gap-2">
+                  <TrendingUp className="text-fuchsia-500 w-5 h-5" /> Pump Performance Matrix
+                </CardTitle>
+             </CardHeader>
+             <CardContent className="pt-6 overflow-x-auto p-0">
+               <table className="w-full text-left border-collapse text-sm">
+                 <thead>
+                   <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase text-[10px] font-bold tracking-widest">
+                     <th className="p-4">Pump ID</th>
+                     <th className="p-4">Lifetime Liters Dispensed</th>
+                     <th className="p-4">Connected Tank</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                   {pumpsAnalytics.map((p: any) => (
+                     <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30">
+                       <td className="p-4 font-bold max-w-[150px] truncate">{p.name}</td>
+                       <td className="p-4 font-mono text-emerald-600 dark:text-emerald-400 font-black">{p.meterReading.toLocaleString()} L</td>
+                       <td className="p-4 font-bold text-xs uppercase tracking-widest text-slate-500">{p.tank.name} ({p.tank.fuelType.code})</td>
+                     </tr>
+                   ))}
+                   {pumpsAnalytics.length === 0 && (
+                     <tr><td colSpan={3} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">No Pumps Registered</td></tr>
+                   )}
+                 </tbody>
+               </table>
+             </CardContent>
+          </Card>
+
+          {/* Sales by Fuel Grade */}
+          <Card className="border-t-4 border-t-orange-500 shadow-xl">
+             <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
+                <CardTitle className="text-xl font-black flex items-center gap-2">
+                  <TrendingUp className="text-orange-500 w-5 h-5" /> Sales Volume by Fuel Grade
+                </CardTitle>
+             </CardHeader>
+             <CardContent className="pt-6 overflow-x-auto p-0">
+               <table className="w-full text-left border-collapse text-sm">
+                 <thead>
+                   <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase text-[10px] font-bold tracking-widest">
+                     <th className="p-4">Fuel Grade</th>
+                     <th className="p-4">Total Sold (Liters)</th>
+                     <th className="p-4">Gross Revenue</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                   {fuelTypeAnalytics.map((f: any) => {
+                     // Aggregate all sale items for this fuel type
+                     const items = salesItemsData.filter((i: any) => i.fuelTypeId === f.id)
+                     const totalLiters = items.reduce((sum: number, i: any) => sum + i.quantity, 0)
+                     const totalRev = items.reduce((sum: number, i: any) => sum + i.totalPrice, 0)
+
+                     return (
+                       <tr key={f.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30">
+                         <td className="p-4 font-bold">{f.name} <span className="p-1 px-2 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-mono">{f.code}</span></td>
+                         <td className="p-4 font-mono font-black">{totalLiters.toLocaleString(undefined, {minimumFractionDigits: 2})} L</td>
+                         <td className="p-4 font-mono text-emerald-600 dark:text-emerald-400 font-bold">SAR {totalRev.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                       </tr>
+                     )
+                   })}
+                 </tbody>
+               </table>
+             </CardContent>
+          </Card>
+
         </div>
 
         {/* VAT Summary Card */}
