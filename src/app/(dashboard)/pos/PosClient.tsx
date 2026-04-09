@@ -11,16 +11,39 @@ import { roundSAR } from "@/lib/financial"
 
 export default function PosClient({ activeShift }: { activeShift: any }) {
   const { t } = useI18n()
+  const [inputMode, setInputMode] = useState<"AMOUNT" | "LITERS">("AMOUNT")
   const [liters, setLiters] = useState("")
+  const [sarAmount, setSarAmount] = useState("")
+
   const [selectedPayment, setSelectedPayment] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [message, setMessage] = useState("")
 
   const activeTank = activeShift.pump.tank
   const pricePerLiter = activeTank?.fuelType.pricePerLiter || 0
-  const quantity = parseFloat(liters) || 0
 
-  // Precision calculations matching server-side logic
+  // Live conversion logic
+  const handleAmountChange = (val: string) => {
+    setSarAmount(val)
+    const num = parseFloat(val)
+    if (!isNaN(num) && num > 0) {
+      setLiters((num / pricePerLiter).toFixed(2))
+    } else {
+      setLiters("")
+    }
+  }
+
+  const handleLitersChange = (val: string) => {
+    setLiters(val)
+    const num = parseFloat(val)
+    if (!isNaN(num) && num > 0) {
+      setSarAmount((num * pricePerLiter).toFixed(2))
+    } else {
+      setSarAmount("")
+    }
+  }
+
+  const quantity = parseFloat(liters) || 0
   const totalAmount = roundSAR(quantity * pricePerLiter)
   const netAmount = roundSAR(totalAmount / 1.15)
   const vatAmount = roundSAR(totalAmount - netAmount)
@@ -37,9 +60,11 @@ export default function PosClient({ activeShift }: { activeShift: any }) {
       formData.append("shiftId", activeShift.id)
       formData.append("pumpId", activeShift.pumpId)
       formData.append("tankId", activeTank.id)
+      formData.set("quantity", liters) // Ensure we send the final calculated liters
 
       await processSale(formData)
       setLiters("")
+      setSarAmount("")
       setSelectedPayment("")
       setMessage(t("success_msg"))
     } catch (e: any) {
@@ -55,12 +80,32 @@ export default function PosClient({ activeShift }: { activeShift: any }) {
       {/* PUMP CONTROL AND KEYPAD */}
       <Card className="flex-1 shadow-xl border-t-8 border-t-emerald-500">
         <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800 pb-6 mb-6">
-          <CardTitle className="text-2xl md:text-3xl font-black flex items-center gap-3">
-            {t("terminal")}: {activeShift.pump.name}
-          </CardTitle>
-          <p className="text-sm font-bold text-slate-500 flex items-center gap-2">
-            {t("status")}: <span className="text-emerald-500 uppercase tracking-widest text-[10px]">{t("active_shift")}</span>
-          </p>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle className="text-2xl md:text-3xl font-black flex items-center gap-3">
+                {t("terminal")}: {activeShift.pump.name}
+              </CardTitle>
+              <p className="text-sm font-bold text-slate-500 flex items-center gap-2">
+                {t("status")}: <span className="text-emerald-500 uppercase tracking-widest text-[10px]">{t("active_shift")}</span>
+              </p>
+            </div>
+
+            {/* Input Mode Toggle */}
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setInputMode("AMOUNT")}
+                className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${inputMode === 'AMOUNT' ? 'bg-white dark:bg-slate-700 shadow-sm text-emerald-600' : 'text-slate-400 opacity-60'}`}
+              >
+                By Amount
+              </button>
+              <button
+                onClick={() => setInputMode("LITERS")}
+                className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${inputMode === 'LITERS' ? 'bg-white dark:bg-slate-700 shadow-sm text-emerald-600' : 'text-slate-400 opacity-60'}`}
+              >
+                By Liters
+              </button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <form action={handleSale} className="space-y-8">
@@ -76,19 +121,51 @@ export default function PosClient({ activeShift }: { activeShift: any }) {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t("quantity")}</label>
-              <Input
-                type="number"
-                name="quantity"
-                value={liters}
-                onChange={(e) => setLiters(e.target.value)}
-                step="0.01"
-                min="0.01"
-                required
-                className="h-20 text-4xl font-mono text-center font-black !rounded-2xl dark:text-emerald-400 focus-visible:ring-4 focus-visible:ring-emerald-600/20 border-2"
-                placeholder="0.00"
-              />
+            {/* DUAL INPUT SYSTEM */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative">
+              <div className={`space-y-3 transition-all duration-300 ${inputMode === 'LITERS' && 'opacity-60 scale-95 pointer-events-none'}`}>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Enter Amount (SAR)</label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    value={sarAmount}
+                    onChange={(e) => handleAmountChange(e.target.value)}
+                    step="0.01"
+                    placeholder="0.00"
+                    disabled={inputMode === 'LITERS'}
+                    className="h-24 text-4xl font-mono text-center font-black !rounded-3xl dark:text-emerald-400 focus-visible:ring-4 focus-visible:ring-emerald-600/20 border-2"
+                  />
+                  {inputMode === 'AMOUNT' && (
+                    <div className="absolute top-2 right-4 text-[10px] font-black text-emerald-500 uppercase tracking-widest animate-pulse">Primary Input</div>
+                  )}
+                </div>
+              </div>
+
+              <div className={`space-y-3 transition-all duration-300 ${inputMode === 'AMOUNT' && 'opacity-60 scale-95 pointer-events-none'}`}>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Enter Liters (L)</label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    name="quantity"
+                    value={liters}
+                    onChange={(e) => handleLitersChange(e.target.value)}
+                    step="0.01"
+                    placeholder="0.00"
+                    disabled={inputMode === 'AMOUNT'}
+                    className="h-24 text-4xl font-mono text-center font-black !rounded-3xl dark:text-emerald-400 focus-visible:ring-4 focus-visible:ring-emerald-600/20 border-2"
+                  />
+                  {inputMode === 'LITERS' && (
+                    <div className="absolute top-2 right-4 text-[10px] font-black text-emerald-500 uppercase tracking-widest animate-pulse">Primary Input</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Helper badge */}
+              <div className="col-span-full text-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100 dark:bg-slate-900 px-4 py-2 rounded-full border border-slate-200 dark:border-slate-800">
+                  Auto-calculating at SAR {pricePerLiter.toFixed(3)} per liter
+                </span>
+              </div>
             </div>
 
             {/* PAYMENT METHOD — Required Selection */}
