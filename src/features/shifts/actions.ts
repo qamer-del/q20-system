@@ -40,15 +40,15 @@ export async function addPump(formData: FormData) {
 // ==========================================
 export async function openShift(formData: FormData) {
   const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  if (!session?.user) return { error: "Unauthorized" }
 
   const pumpId = formData.get("pumpId") as string
-  if (!pumpId) throw new Error("Please select a pump")
+  if (!pumpId) return { error: "Please select a pump" }
 
   const openingMeterStr = formData.get("openingMeter") as string
   const openingMeter = parseFloat(openingMeterStr)
   if (isNaN(openingMeter) || openingMeter < 0) {
-    throw new Error("Please enter a valid starting meter reading.")
+    return { error: "Please enter a valid starting meter reading." }
   }
 
   // Check if pump is already in use by another active shift
@@ -57,12 +57,12 @@ export async function openShift(formData: FormData) {
   })
 
   if (existingShift) {
-    throw new Error("This pump is already in use by an active shift.")
+    return { error: "This pump is already in use by an active shift." }
   }
 
   const pump = await prisma.pump.findUnique({ where: { id: pumpId } })
-  if (!pump) throw new Error("Pump not found")
-  if (pump.status !== "ACTIVE") throw new Error("Pump is disabled or in maintenance")
+  if (!pump) return { error: "Pump not found" }
+  if (pump.status !== "ACTIVE") return { error: "Pump is disabled or in maintenance" }
 
   await prisma.$transaction(async (tx: any) => {
     // 1. Create Shift
@@ -93,25 +93,26 @@ export async function openShift(formData: FormData) {
   })
 
   revalidatePath("/shifts")
+  return { success: true }
 }
 
 export async function closeShift(formData: FormData) {
   const session = await auth()
-  if (!session?.user) throw new Error("Unauthorized")
+  if (!session?.user) return { error: "Unauthorized" }
 
   const shiftId = formData.get("shiftId") as string
   const physicalClosingMeter = parseFloat(formData.get("closingMeter") as string)
 
-  if (isNaN(physicalClosingMeter)) throw new Error("Invalid meter reading")
+  if (isNaN(physicalClosingMeter)) return { error: "Invalid meter reading" }
 
   const shift = await prisma.shift.findUnique({ where: { id: shiftId }, include: { pump: true } })
-  if (!shift || shift.status !== "OPEN") throw new Error("Active shift not found")
+  if (!shift || shift.status !== "OPEN") return { error: "Active shift not found" }
 
   // The actual dispensed amount based on physical pump numbers
   const actualLiters = physicalClosingMeter - shift.openingMeter
 
   if (actualLiters < 0) {
-    throw new Error(`Closing meter cannot be lower than opening meter (${shift.openingMeter}L).`)
+    return { error: `Closing meter cannot be lower than opening meter (${shift.openingMeter}L).` }
   }
 
   await prisma.$transaction(async (tx: any) => {

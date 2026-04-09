@@ -18,7 +18,9 @@ export function OpenShiftForms({ pumps }: { pumps: any[] }) {
         throw new Error("Please enter opening meter")
       }
       formData.append("pumpId", pumpId)
-      await openShift(formData)
+      const res: any = await openShift(formData)
+      if (res?.error) throw new Error(res.error)
+      
       toast.success("Shift Opened Successfully!")
     } catch (e: any) {
       toast.error(e.message || "Error opening shift")
@@ -93,7 +95,9 @@ export function CloseShiftForm({ activeShift }: { activeShift: any }) {
     setLoading(true)
     try {
       formData.append("shiftId", activeShift.id)
-      await closeShift(formData)
+      const res: any = await closeShift(formData)
+      if (res?.error) throw new Error(res.error)
+
       toast.success("Shift Closed Successfully!")
     } catch (e: any) {
       toast.error(e.message || "Error closing shift")
