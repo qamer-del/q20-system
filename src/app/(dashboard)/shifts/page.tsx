@@ -2,16 +2,24 @@ import { prisma } from "@/lib/prisma"
 import { protectRoute } from "@/lib/protect"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
-import { PlayCircle, StopCircle, Fuel, Clock, AlertTriangle, TrendingDown } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
+import { PlayCircle, StopCircle, Clock, AlertTriangle } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { OpenShiftForms, CloseShiftForm } from "./ShiftForms"
+import { cookies } from "next/headers"
+import enDict from "../../../../messages/en.json"
+import arDict from "../../../../messages/ar.json"
+
+async function getTranslation() {
+  const cookieStore = await cookies()
+  const locale = cookieStore.get("NEXT_LOCALE")?.value || "en"
+  return locale === "ar" ? arDict : enDict
+}
 
 export default async function ShiftsPage() {
   const session = await protectRoute(["ADMIN", "MANAGER", "CASHIER"])
+  const dict = await getTranslation()
+  const t = (dict as any).Shifts
 
-  // Explicitly casting and extracting to avoid session attribute mismatches
   const role = (session?.user as any)?.role
   const userId = (session?.user as any)?.id
 
@@ -23,9 +31,6 @@ export default async function ShiftsPage() {
     include: { tank: { include: { fuelType: true } } }
   })
 
-  // Get active shifts based on role
-  // CASHIER: only their own
-  // MANAGER/ADMIN: all open shifts in the system
   const activeShifts = await prisma.shift.findMany({
     where: {
       status: "OPEN",
@@ -38,10 +43,8 @@ export default async function ShiftsPage() {
     }
   })
 
-  // Check if current user has an active shift (for disabling open button later if needed)
   const myActiveShift = activeShifts.find(s => s.userId === userId)
 
-  // View historical shifts (Standard history view)
   const historyQuery: any = { status: "CLOSED" }
   if (role === "CASHIER") historyQuery.userId = userId
 
@@ -61,12 +64,12 @@ export default async function ShiftsPage() {
             <div className="p-3 bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-600 dark:text-fuchsia-400 rounded-2xl">
               <Clock className="w-8 h-8" />
             </div>
-            Shift Control
+            {t.title}
           </h1>
 
           {role !== "CASHIER" && (
             <span className="bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-900/20 border border-fuchsia-200 dark:border-fuchsia-900/50 text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-full shadow-sm">
-              Global Supervision Mode
+              {t.supervision_mode}
             </span>
           )}
         </div>
@@ -77,40 +80,40 @@ export default async function ShiftsPage() {
             <div className="space-y-6">
               {role === "CASHIER" && (
                 <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
-                  <StopCircle className="w-4 h-4" /> Your Active Shift
+                  <StopCircle className="w-4 h-4" /> {t.your_active_shift}
                 </h2>
               )}
               <div className="grid grid-cols-1 gap-8">
                 {activeShifts.map((s) => (
-                  <CloseShiftForm key={s.id} activeShift={s} currentUserRole={role} currentUserId={userId} />
+                  <CloseShiftForm key={s.id} activeShift={s} currentUserRole={role} currentUserId={userId} dict={dict} />
                 ))}
               </div>
             </div>
           ) : role === "CASHIER" ? (
-            <OpenShiftForms pumps={pumps} />
+            <OpenShiftForms pumps={pumps} dict={dict} />
           ) : (
             <div className="bg-white dark:bg-slate-900 border-2 border-dashed border-slate-200 dark:border-slate-800 p-12 rounded-[2rem] text-center">
-              <p className="text-slate-400 font-bold uppercase tracking-widest">No active shifts in the station.</p>
-              <p className="text-xs text-slate-500 mt-2">All employees have finalized their reconciliations or haven't started yet.</p>
+              <p className="text-slate-400 font-bold uppercase tracking-widest">{t.no_active}</p>
+              <p className="text-xs text-slate-500 mt-2">{t.no_active_desc}</p>
             </div>
           )}
 
-          {/* If Manager wants to open their own shift */}
+          {/* If Manager/Admin wants to open their own shift */}
           {role !== "CASHIER" && !myActiveShift && (
             <div className="pt-10 border-t border-slate-100 dark:border-slate-800">
               <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2">
-                <PlayCircle className="w-4 h-4" /> Your Personal Shift Session
+                <PlayCircle className="w-4 h-4" /> {t.personal_session}
               </h2>
-              <OpenShiftForms pumps={pumps} />
+              <OpenShiftForms pumps={pumps} dict={dict} />
             </div>
           )}
         </div>
 
-        {/* Shift History */}
+        {/* Shift Audit History */}
         <Card className="rounded-[2rem] overflow-hidden border-none shadow-xl">
           <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800 py-8">
             <CardTitle className="text-lg flex items-center gap-2 uppercase tracking-widest font-black text-slate-500">
-              <Clock className="w-5 h-5" /> Audit History
+              <Clock className="w-5 h-5" /> {t.audit_history}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -118,10 +121,10 @@ export default async function ShiftsPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase text-[10px] font-bold tracking-widest">
-                    <th className="p-6">Date & Cashier</th>
-                    <th className="p-6">Pump & Meter</th>
-                    <th className="p-6">Quantity Analysis</th>
-                    <th className="p-6">Financial Summary</th>
+                    <th className="p-6">{t.date_cashier}</th>
+                    <th className="p-6">{t.pump_meter}</th>
+                    <th className="p-6">{t.quantity_analysis}</th>
+                    <th className="p-6">{t.financial_summary}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
@@ -130,7 +133,6 @@ export default async function ShiftsPage() {
                     const isPerfect = Math.abs(discrepancy) < 0.1
                     const totalSales = s.sales?.reduce((sum: number, sale: any) => sum + sale.totalAmount, 0) || 0
                     const cVar = s.cashVariance || 0
-                    const bVar = s.bankVariance || 0
 
                     return (
                       <tr key={s.id} className="border-b dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
@@ -149,11 +151,11 @@ export default async function ShiftsPage() {
                             <span className="text-lg font-black text-slate-800 dark:text-slate-200">{s.actualLiters?.toLocaleString()} L</span>
                             {isPerfect ? (
                               <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-1 mt-1">
-                                ✓ Exact Match
+                                ✓ {t.variance_exact}
                               </span>
                             ) : (
                               <span className={`text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 mt-1 ${discrepancy > 0 ? 'text-blue-500' : 'text-rose-500'}`}>
-                                <AlertTriangle className="w-3 h-3" /> {discrepancy > 0 ? '+' : ''}{discrepancy} L Variance
+                                <AlertTriangle className="w-3 h-3" /> {discrepancy > 0 ? '+' : ''}{discrepancy} L {t.variance_label}
                               </span>
                             )}
                           </div>
@@ -161,13 +163,13 @@ export default async function ShiftsPage() {
                         <td className="p-6">
                           <div className="space-y-1">
                             <div className="flex justify-between items-center gap-4">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Sales</span>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.financial_summary}</span>
                               <span className="font-mono font-black text-slate-700 dark:text-slate-300">SAR {totalSales.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between items-center gap-4">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cash Var</span>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.cash_variance}</span>
                               <span className={`font-mono font-bold text-xs ${cVar === 0 ? 'text-slate-400' : cVar > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                {cVar === 0 ? 'Balanced' : `${cVar > 0 ? '+' : ''}${cVar.toLocaleString()}`}
+                                {cVar === 0 ? t.balanced : `${cVar > 0 ? '+' : ''}${cVar.toLocaleString()}`}
                               </span>
                             </div>
                           </div>
@@ -178,7 +180,7 @@ export default async function ShiftsPage() {
                 </tbody>
               </table>
               {closedShifts.length === 0 && (
-                <div className="py-20 text-center text-slate-400 italic">No shift history found.</div>
+                <div className="py-20 text-center text-slate-400 italic">{t.no_history}</div>
               )}
             </div>
           </CardContent>
