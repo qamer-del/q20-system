@@ -22,8 +22,12 @@ export async function addAccount(formData: FormData) {
 
   if (type === "BANK_ACCOUNT") {
     actualType = "ASSET"
-    const mainBank = await prisma.account.findUnique({ where: { code: "1002" } })
-    if (!mainBank) throw new Error("Default bank account (1002) not found in the system.")
+    let mainBank = await prisma.account.findUnique({ where: { code: "1002" } })
+    if (!mainBank) {
+      mainBank = await prisma.account.create({
+        data: { code: "1002", name: "Main Bank Account", type: "ASSET" }
+      })
+    }
     parentAccountId = mainBank.id
   }
 
