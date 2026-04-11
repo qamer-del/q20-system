@@ -12,7 +12,7 @@ export async function protectRoute(allowedRoles: ("ADMIN" | "MANAGER" | "CASHIER
     if (!allowedRoles.includes(session.user.role)) {
         // Redirect cashiers to POS if they lack access. Otherwise dashboard.
         // @ts-ignore
-        if (session.user.role === "CASHIER") redirect("/pos")
+        if (session.user.role === "CASHIER") redirect("/dashboard")
         else redirect("/dashboard")
     }
 

@@ -24,6 +24,12 @@ export default function Sidebar({ mobile, role = "CASHIER" }: { mobile?: boolean
   const pathname = usePathname()
   const { t } = useI18n()
 
+  // Cashiers get a simplified nav: their shift dashboard + POS
+  const cashierLinks = [
+    { name: "My Shift", href: "/dashboard", icon: Clock },
+    { name: "Point of Sale", href: "/pos", icon: MonitorPlay },
+  ]
+
   const allLinks = [
     { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
     { name: "Shift Control", href: "/shifts", icon: Clock },
@@ -38,11 +44,10 @@ export default function Sidebar({ mobile, role = "CASHIER" }: { mobile?: boolean
     { name: "Admin Settings", href: "/admin", icon: Settings },
   ]
 
-  const links = allLinks.filter(link => {
+  const links = role === "CASHIER" ? cashierLinks : allLinks.filter(link => {
     if (role === "ADMIN") return true;
-    if (role === "CASHIER") return ["/dashboard", "/pos"].includes(link.href);
-    if (role === "MANAGER") return ["/dashboard", "/inventory", "/accounting", "/reporting", "/purchases"].includes(link.href);
-    return ["/dashboard"].includes(link.href); // Viewer defaults
+    if (role === "MANAGER") return ["/dashboard", "/shifts", "/inventory", "/accounting", "/reporting", "/purchases"].includes(link.href);
+    return ["/dashboard"].includes(link.href);
   })
 
   return (

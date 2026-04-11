@@ -1,14 +1,14 @@
 import { prisma } from "@/lib/prisma"
-import { protectRoute } from "@/lib/protect"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
-import { Droplet, Activity, CircleDollarSign, LayoutDashboard, DatabaseZap, Banknote, Landmark } from "lucide-react"
+import { Activity, CircleDollarSign, LayoutDashboard, DatabaseZap, Banknote, Landmark, Clock } from "lucide-react"
 import { cookies } from "next/headers"
 import enDict from "../../../../messages/en.json"
 import arDict from "../../../../messages/ar.json"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { calculateBalance, calculateZakat, roundSAR } from "@/lib/financial"
 import SmartSummary from "./SmartSummary"
+import { CashierOpenShift, CashierCloseShift } from "./CashierShiftWidget"
 
 async function getTranslation() {
   const cookieStore = await cookies()
@@ -17,14 +17,60 @@ async function getTranslation() {
 }
 
 export default async function DashboardPage() {
-  await protectRoute(["ADMIN", "MANAGER"])
   const session = await auth()
   // @ts-ignore
   if (!session?.user) redirect("/login")
 
+  // @ts-ignore
+  const role: string = (session.user as any).role || "CASHIER"
+  // @ts-ignore
+  const userId: string = (session.user as any).id
+
   const dict = await getTranslation()
 
-  // ── Base data ────────────────────────────────────────────────────────────
+  // ── CASHIER VIEW ─────────────────────────────────────────────────────────
+  if (role === "CASHIER") {
+    const pumps = await prisma.pump.findMany({
+      include: { tank: { include: { fuelType: true } } }
+    })
+
+    const activeShift = await prisma.shift.findFirst({
+      where: { status: "OPEN", userId },
+      include: {
+        pump: { include: { tank: { include: { fuelType: true } } } },
+        sales: true
+      }
+    })
+
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-6 lg:p-10">
+        <div className="max-w-5xl mx-auto space-y-8">
+
+          {/* Header */}
+          <div>
+            <h1 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white flex items-center gap-4 tracking-tight">
+              <div className="p-3 bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-600 dark:text-fuchsia-400 rounded-2xl">
+                <Clock className="w-7 h-7" />
+              </div>
+              My Shift
+            </h1>
+            <p className="text-slate-500 mt-2 text-base">
+              {(dict.General as any).welcome}, <span className="font-bold text-slate-700 dark:text-slate-300 capitalize">{session.user.name}</span>
+            </p>
+          </div>
+
+          {/* Shift Widget */}
+          {activeShift
+            ? <CashierCloseShift activeShift={activeShift} dict={dict} />
+            : <CashierOpenShift pumps={pumps} dict={dict} />
+          }
+
+        </div>
+      </div>
+    )
+  }
+
+  // ── ADMIN / MANAGER VIEW ─────────────────────────────────────────────────
   const tanks = await prisma.tank.findMany()
   const sales = await prisma.sale.findMany({
     take: 5,
@@ -32,7 +78,7 @@ export default async function DashboardPage() {
     include: { items: true }
   })
 
-  // ── Aggregate Financial Data ──────────────────────────────────────────────
+  // Aggregate Financial Data
   const totalSales = await prisma.sale.aggregate({ _sum: { totalAmount: true } })
   const salesAmount = roundSAR(totalSales._sum.totalAmount || 0)
 
@@ -52,10 +98,9 @@ export default async function DashboardPage() {
     'gregorian'
   )
 
-  // ── Today's Data (Smart Summary) ─────────────────────────────────────────
+  // Today's Stats
   const startOfToday = new Date()
   startOfToday.setHours(0, 0, 0, 0)
-
   const startOfYesterday = new Date(startOfToday)
   startOfYesterday.setDate(startOfYesterday.getDate() - 1)
 
@@ -63,7 +108,6 @@ export default async function DashboardPage() {
     where: { createdAt: { gte: startOfToday } },
     include: { items: true, pump: true }
   })
-
   const yesterdaySalesRaw = await prisma.sale.findMany({
     where: { createdAt: { gte: startOfYesterday, lt: startOfToday } },
     include: { items: true }
@@ -78,24 +122,17 @@ export default async function DashboardPage() {
   const activePumps = await prisma.pump.count({ where: { status: 'ACTIVE' } })
   const totalFuelStock = Math.round(tanks.reduce((sum: number, t: any) => sum + t.currentVolume, 0))
 
-  // ── Smart Insights ────────────────────────────────────────────────────────
+  // Smart Insights
   const insights: string[] = []
-
-  // Liters trend vs yesterday
   if (todayLiters > 0 && yesterdayLiters > 0) {
     const pct = Math.round(((todayLiters - yesterdayLiters) / yesterdayLiters) * 100)
-    if (pct > 0) {
-      insights.push(`▲ Fuel dispensed is up ${pct}% compared to yesterday (${Math.round(todayLiters).toLocaleString()} L vs ${Math.round(yesterdayLiters).toLocaleString()} L).`)
-    } else if (pct < 0) {
-      insights.push(`▼ Fuel dispensed is down ${Math.abs(pct)}% versus yesterday (${Math.round(todayLiters).toLocaleString()} L vs ${Math.round(yesterdayLiters).toLocaleString()} L).`)
-    } else {
-      insights.push(`Fuel dispensed today is on par with yesterday at ~${Math.round(todayLiters).toLocaleString()} L.`)
-    }
+    if (pct > 0) insights.push(`▲ Fuel dispensed is up ${pct}% compared to yesterday (${Math.round(todayLiters).toLocaleString()} L vs ${Math.round(yesterdayLiters).toLocaleString()} L).`)
+    else if (pct < 0) insights.push(`▼ Fuel dispensed is down ${Math.abs(pct)}% versus yesterday (${Math.round(todayLiters).toLocaleString()} L vs ${Math.round(yesterdayLiters).toLocaleString()} L).`)
+    else insights.push(`Fuel dispensed today is on par with yesterday at ~${Math.round(todayLiters).toLocaleString()} L.`)
   } else if (todayLiters > 0) {
     insights.push(`${Math.round(todayLiters).toLocaleString()} L dispensed today — no prior-day data for comparison.`)
   }
 
-  // Top pump by liters today
   if (todaySalesRaw.length > 0) {
     const pumpTotals: Record<string, { name: string; liters: number }> = {}
     for (const sale of todaySalesRaw as any[]) {
@@ -111,11 +148,7 @@ export default async function DashboardPage() {
     }
   }
 
-  // Cash variance check on the last closed shift
-  const lastShift = await prisma.shift.findFirst({
-    where: { status: 'CLOSED' },
-    orderBy: { closedAt: 'desc' }
-  })
+  const lastShift = await prisma.shift.findFirst({ where: { status: 'CLOSED' }, orderBy: { closedAt: 'desc' } })
   if (lastShift) {
     const cashVar = (lastShift as any).cashVariance || 0
     if (Math.abs(cashVar) >= 1) {
@@ -123,7 +156,6 @@ export default async function DashboardPage() {
     }
   }
 
-  // Low stock warning
   const lowTanks = tanks.filter((t: any) => (t.currentVolume / t.capacity) * 100 < 15)
   if (lowTanks.length > 0) {
     insights.push(`⚠ ${lowTanks.length} fuel tank${lowTanks.length > 1 ? 's' : ''} (${lowTanks.map((t: any) => t.name).join(', ')}) ${lowTanks.length > 1 ? 'are' : 'is'} critically low — immediate refill required.`)
@@ -146,7 +178,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* ✨ Smart Daily Summary */}
+        {/* Smart Daily Summary */}
         <SmartSummary
           todaySalesAmount={todaySalesAmount}
           todayCash={todayCash}
@@ -158,7 +190,7 @@ export default async function DashboardPage() {
           dict={dict}
         />
 
-        {/* Overall KPIs */}
+        {/* All-Time KPIs */}
         <div>
           <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
             <span className="inline-block w-2 h-4 bg-gradient-to-b from-blue-400 to-indigo-400 rounded-full" />
@@ -235,7 +267,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Lower Content Grid */}
+        {/* Lower Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2">
             <CardHeader className="border-b border-slate-100 dark:border-slate-800">
@@ -255,8 +287,8 @@ export default async function DashboardPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                     {sales.map((s: any) => (
-                      <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer">
-                        <td className="p-4 text-slate-500 dark:text-slate-400 font-mono text-xs">{new Date(s.createdAt).toLocaleTimeString()}</td>
+                      <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td className="p-4 text-slate-500 font-mono text-xs">{new Date(s.createdAt).toLocaleTimeString()}</td>
                         <td className="p-4 font-bold text-slate-900 dark:text-white">{s.invoiceNumber}</td>
                         <td className="p-4 text-center">
                           <span className={`px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-widest ${s.paymentMethod === 'CASH'

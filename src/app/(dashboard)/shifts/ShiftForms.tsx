@@ -190,6 +190,10 @@ export function CloseShiftForm({
             return res
           }}
           successMessage={isOverride ? `${activeShift.user.name} — ${t.close_shift} ✓` : `${t.close_shift} ✓`}
+          loadingMessage={isOverride ? "Finalizing override reconciliation..." : "Closing shift and reconciling..."}
+          confirmMessage={isOverride
+            ? `Confirm supervisor override: close shift for ${activeShift.user.name}?`
+            : "Are you sure you want to close this shift? Ensure all readings are accurate."}
           className={`${isOverride ? 'bg-amber-50/50 border-amber-100' : 'bg-rose-50/50 border-rose-100'} p-8 rounded-[2rem] border dark:bg-slate-900/40 dark:border-slate-800`}
         >
           <h3 className={`font-black mb-6 flex items-center gap-2 ${isOverride ? 'text-amber-700 dark:text-amber-400' : 'text-rose-900 dark:text-rose-400'}`}>

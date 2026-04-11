@@ -16,7 +16,7 @@ async function getTranslation() {
 }
 
 export default async function ShiftsPage() {
-  const session = await protectRoute(["ADMIN", "MANAGER", "CASHIER"])
+  const session = await protectRoute(["ADMIN", "MANAGER"])
   const dict = await getTranslation()
   const t = (dict as any).Shifts
 
