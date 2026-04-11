@@ -84,10 +84,13 @@ export async function postJournalEntry(formData: FormData) {
   if (debitAccountId === creditAccountId) throw new Error("Cannot debit and credit the same account.")
 
   // Verify accounts exist
-  const debitAccount = await prisma.account.findUnique({ where: { id: debitAccountId } })
-  const creditAccount = await prisma.account.findUnique({ where: { id: creditAccountId } })
+  const debitAccount = await prisma.account.findUnique({ where: { id: debitAccountId }, include: { childAccounts: true } })
+  const creditAccount = await prisma.account.findUnique({ where: { id: creditAccountId }, include: { childAccounts: true } })
   if (!debitAccount) throw new Error("Debit account not found.")
   if (!creditAccount) throw new Error("Credit account not found.")
+
+  if (debitAccount.childAccounts.length > 0) throw new Error(`Cannot post directly to an aggregate parent account (${debitAccount.name}). Select a specific sub-account.`)
+  if (creditAccount.childAccounts.length > 0) throw new Error(`Cannot post directly to an aggregate parent account (${creditAccount.name}). Select a specific sub-account.`)
 
   await prisma.journalEntry.create({
     data: {

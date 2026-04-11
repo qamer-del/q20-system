@@ -1,3 +1,4 @@
+import React from "react"
 import { prisma } from "@/lib/prisma"
 import { protectRoute } from "@/lib/protect"
 import { addAccount, postJournalEntry } from "@/features/accounting/actions"
@@ -25,21 +26,25 @@ export default async function AccountingPage() {
     orderBy: { code: 'asc' }
   })
 
-  const chartOfAccounts = accountsData.map((account: any) => {
+  const topLevelAccounts = accountsData.filter((a: any) => !a.parentAccountId).map((account: any) => {
     let totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
     let totalCredit = account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
 
+    let children = []
     if (account.childAccounts && account.childAccounts.length > 0) {
-      for (const child of account.childAccounts) {
-        totalDebit += child.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
-        totalCredit += child.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
-      }
+      children = account.childAccounts.map((child: any) => {
+        const cDebit = child.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
+        const cCredit = child.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
+        totalDebit += cDebit
+        totalCredit += cCredit
+        return { ...child, totalDebit: roundSAR(cDebit), totalCredit: roundSAR(cCredit), balance: calculateBalance(child.type, roundSAR(cDebit), roundSAR(cCredit)) }
+      })
     }
 
     totalDebit = roundSAR(totalDebit)
     totalCredit = roundSAR(totalCredit)
     const balance = calculateBalance(account.type, totalDebit, totalCredit)
-    return { ...account, totalDebit, totalCredit, balance }
+    return { ...account, totalDebit, totalCredit, balance, children }
   })
 
   const recentJournals = await prisma.journalEntry.findMany({
@@ -48,9 +53,9 @@ export default async function AccountingPage() {
     include: { transactions: { include: { account: true } } }
   })
 
-  // Calculate trial balance totals
-  const trialDebit = roundSAR(chartOfAccounts.reduce((s: number, a: any) => s + a.totalDebit, 0))
-  const trialCredit = roundSAR(chartOfAccounts.reduce((s: number, a: any) => s + a.totalCredit, 0))
+  // Calculate trial balance totals using only top-level aggregated amounts
+  const trialDebit = roundSAR(topLevelAccounts.reduce((s: number, a: any) => s + a.totalDebit, 0))
+  const trialCredit = roundSAR(topLevelAccounts.reduce((s: number, a: any) => s + a.totalCredit, 0))
   const isBalanced = trialDebit === trialCredit
 
   return (
@@ -93,28 +98,47 @@ export default async function AccountingPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50 text-sm">
-                    {chartOfAccounts.map((acc: any) => (
-                      <tr key={acc.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors">
-                        <td className="p-5 font-bold dark:text-slate-200 flex items-center gap-3">
-                          <span className="bg-violet-100 dark:bg-violet-900/30 text-violet-600 px-2 py-1 rounded font-mono text-xs">{acc.code}</span>
-                          {acc.name}
-                          {acc.parentAccountId && <span className="ml-2 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">Sub-Account</span>}
-                        </td>
-                        <td className="p-5 text-[10px] uppercase font-bold text-slate-400 tracking-widest">
-                          {(dict.Accounting as any)[acc.type.toLowerCase()] || acc.type}
-                        </td>
-                        <td className="p-5 text-right font-mono text-slate-400">{acc.totalDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className="p-5 text-right font-mono text-slate-400">{acc.totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className={`p-5 text-right font-black ${acc.balance < 0 ? 'text-rose-600 dark:text-rose-500' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                          SAR {acc.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
+                    {topLevelAccounts.map((acc: any) => (
+                      <React.Fragment key={acc.id}>
+                        <tr className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors">
+                          <td className="p-5 font-bold dark:text-slate-200 flex items-center gap-3">
+                            <span className="bg-violet-100 dark:bg-violet-900/30 text-violet-600 px-2 py-1 rounded font-mono text-xs">{acc.code}</span>
+                            {acc.name}
+                            {acc.children.length > 0 && <span className="ml-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-700">Aggregate</span>}
+                          </td>
+                          <td className="p-5 text-[10px] uppercase font-bold text-slate-400 tracking-widest">
+                            {(dict.Accounting as any)[acc.type.toLowerCase()] || acc.type}
+                          </td>
+                          <td className="p-5 text-right font-mono text-slate-400">{acc.totalDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          <td className="p-5 text-right font-mono text-slate-400">{acc.totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                          <td className={`p-5 text-right font-black ${acc.balance < 0 ? 'text-rose-600 dark:text-rose-500' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                            SAR {acc.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                        {/* Nested Sub-Accounts */}
+                        {acc.children.map((child: any) => (
+                          <tr key={child.id} className="bg-slate-50/40 dark:bg-slate-900/20 hover:bg-slate-100 dark:hover:bg-slate-900/40 transition-colors">
+                            <td className="p-5 pl-14 font-medium text-slate-600 dark:text-slate-300 flex items-center gap-3">
+                              <span className="bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-1 rounded font-mono text-xs">↳ {child.code}</span>
+                              {child.name}
+                            </td>
+                            <td className="p-5 text-[10px] uppercase font-bold text-slate-400 tracking-widest">
+                              {(dict.Accounting as any)[child.type.toLowerCase()] || child.type}
+                            </td>
+                            <td className="p-5 text-right font-mono text-slate-400">{child.totalDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="p-5 text-right font-mono text-slate-400">{child.totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className={`p-5 text-right font-black ${child.balance < 0 ? 'text-rose-500 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-500'}`}>
+                              SAR {child.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
                     ))}
-                    {chartOfAccounts.length === 0 && (
+                    {topLevelAccounts.length === 0 && (
                       <tr><td colSpan={5} className="p-8 text-center text-slate-400 italic">{(dict.Accounting as any).no_accounts}</td></tr>
                     )}
                     {/* Trial Balance Footer */}
-                    {chartOfAccounts.length > 0 && (
+                    {topLevelAccounts.length > 0 && (
                       <tr className="bg-slate-100 dark:bg-slate-900 border-t-2 border-slate-300 dark:border-slate-700">
                         <td colSpan={2} className="p-5 font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">{(dict.Accounting as any).trial_balance_total}</td>
                         <td className="p-5 text-right font-mono font-black text-slate-900 dark:text-white">{trialDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -178,14 +202,14 @@ export default async function AccountingPage() {
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{(dict.Accounting as any).debit} Account</label>
                     <select name="debitAccountId" required className="flex h-12 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-2 text-sm font-medium transition-all">
                       <option value="">{(dict.Accounting as any).select_account}</option>
-                      {chartOfAccounts.map((a: any) => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
+                      {accountsData.filter((a: any) => a.childAccounts?.length === 0).map((a: any) => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{(dict.Accounting as any).credit} Account</label>
                     <select name="creditAccountId" required className="flex h-12 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-2 text-sm font-medium transition-all">
                       <option value="">{(dict.Accounting as any).select_account}</option>
-                      {chartOfAccounts.map((a: any) => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
+                      {accountsData.filter((a: any) => a.childAccounts?.length === 0).map((a: any) => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1">
