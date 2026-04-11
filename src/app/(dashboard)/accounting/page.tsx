@@ -21,13 +21,23 @@ export default async function AccountingPage() {
   await protectRoute(["ADMIN", "MANAGER"])
   const dict = await getTranslation()
   const accountsData = await prisma.account.findMany({
-    include: { transactions: true },
+    include: { transactions: true, childAccounts: { include: { transactions: true } } },
     orderBy: { code: 'asc' }
   })
 
   const chartOfAccounts = accountsData.map((account: any) => {
-    const totalDebit = roundSAR(account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0))
-    const totalCredit = roundSAR(account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0))
+    let totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
+    let totalCredit = account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
+
+    if (account.childAccounts && account.childAccounts.length > 0) {
+      for (const child of account.childAccounts) {
+        totalDebit += child.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
+        totalCredit += child.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
+      }
+    }
+
+    totalDebit = roundSAR(totalDebit)
+    totalCredit = roundSAR(totalCredit)
     const balance = calculateBalance(account.type, totalDebit, totalCredit)
     return { ...account, totalDebit, totalCredit, balance }
   })
@@ -88,6 +98,7 @@ export default async function AccountingPage() {
                         <td className="p-5 font-bold dark:text-slate-200 flex items-center gap-3">
                           <span className="bg-violet-100 dark:bg-violet-900/30 text-violet-600 px-2 py-1 rounded font-mono text-xs">{acc.code}</span>
                           {acc.name}
+                          {acc.parentAccountId && <span className="ml-2 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">Sub-Account</span>}
                         </td>
                         <td className="p-5 text-[10px] uppercase font-bold text-slate-400 tracking-widest">
                           {(dict.Accounting as any)[acc.type.toLowerCase()] || acc.type}
@@ -140,6 +151,7 @@ export default async function AccountingPage() {
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{(dict.Accounting as any).account_type}</label>
                     <select name="type" required className="flex h-12 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-300 transition-all">
+                      <option value="BANK_ACCOUNT">Bank Account (Linked to Main Bank)</option>
                       <option value="ASSET">{(dict.Accounting as any).asset} (Cash, Inventory)</option>
                       <option value="LIABILITY">{(dict.Accounting as any).liability} (Debts, VAT)</option>
                       <option value="EQUITY">{(dict.Accounting as any).equity} (Capital)</option>

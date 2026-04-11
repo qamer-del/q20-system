@@ -87,11 +87,12 @@ export default async function DashboardPage() {
     const totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
     const totalCredit = account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
     const balance = calculateBalance(account.type, totalDebit, totalCredit)
-    return { ...account, balance, code: account.code, type: account.type }
+    return { ...account, balance, code: account.code, type: account.type, parentAccountId: account.parentAccountId }
   })
 
   const cashBalance = roundSAR(accounts.find((a: any) => a.code === "1001")?.balance || 0)
-  const bankBalance = roundSAR(accounts.find((a: any) => a.code === "1002")?.balance || 0)
+  const mainBankId = accounts.find((a: any) => a.code === "1002")?.id
+  const bankBalance = roundSAR(accounts.filter((a: any) => a.code === "1002" || a.parentAccountId === mainBankId).reduce((sum: number, a: any) => sum + a.balance, 0))
 
   const zakatData = calculateZakat(
     accounts.map((a: any) => ({ type: a.type, balance: a.balance, code: a.code })),

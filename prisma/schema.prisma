@@ -225,6 +225,11 @@ model Account {
   name          String
   type          AccountType
 
+  // Parent-child hierarchy
+  parentAccountId String?
+  parentAccount   Account?  @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
+  childAccounts   Account[] @relation("AccountHierarchy")
+
   transactions  LedgerTransaction[]
 
   createdAt     DateTime  @default(now())

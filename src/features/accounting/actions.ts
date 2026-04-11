@@ -17,10 +17,20 @@ export async function addAccount(formData: FormData) {
   const name = (formData.get("name") as string)?.trim()
   const type = formData.get("type") as string
 
+  let actualType = type
+  let parentAccountId = null
+
+  if (type === "BANK_ACCOUNT") {
+    actualType = "ASSET"
+    const mainBank = await prisma.account.findUnique({ where: { code: "1002" } })
+    if (!mainBank) throw new Error("Default bank account (1002) not found in the system.")
+    parentAccountId = mainBank.id
+  }
+
   // Validation
   if (!code || code.length < 2) throw new Error("Account code is required (min 2 characters).")
   if (!name || name.length < 2) throw new Error("Account name is required (min 2 characters).")
-  if (!["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"].includes(type)) {
+  if (!["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"].includes(actualType)) {
     throw new Error("Invalid account type.")
   }
 
@@ -29,7 +39,7 @@ export async function addAccount(formData: FormData) {
   if (existing) throw new Error(`Account code "${code}" already exists (${existing.name}). Use a different code.`)
 
   await prisma.account.create({
-    data: { code, name, type: type as any }
+    data: { code, name, type: actualType as any, parentAccountId }
   })
 
   // Audit
