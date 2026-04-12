@@ -37,6 +37,7 @@ export default function Sidebar({ mobile, role = "CASHIER" }: { mobile?: boolean
     { name: "Fuel Inventory", href: "/inventory", icon: Droplets },
     { name: "Supplier Refills", href: "/purchases", icon: Truck },
     { name: "General Ledger", href: "/accounting", icon: Landmark },
+    { name: "Employee Liabilities", href: "/liabilities", icon: ShieldCheck },
     { name: "ZATCA Invoices", href: "/invoices", icon: ShieldCheck },
     { name: "Financial Reports", href: "/reporting", icon: FileSpreadsheet },
     { name: "Security Audit", href: "/audit", icon: History },
@@ -46,7 +47,7 @@ export default function Sidebar({ mobile, role = "CASHIER" }: { mobile?: boolean
 
   const links = role === "CASHIER" ? cashierLinks : allLinks.filter(link => {
     if (role === "ADMIN") return true;
-    if (role === "MANAGER") return ["/dashboard", "/shifts", "/inventory", "/accounting", "/reporting", "/purchases"].includes(link.href);
+    if (role === "MANAGER") return ["/dashboard", "/shifts", "/inventory", "/accounting", "/liabilities", "/reporting", "/purchases"].includes(link.href);
     return ["/dashboard"].includes(link.href);
   })
 

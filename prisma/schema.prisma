@@ -28,6 +28,8 @@ model User {
   sales         Sale[]
   activityLogs  ActivityLog[]
   shifts        Shift[]
+  approvedShifts Shift[]  @relation("ShiftApprover")
+  liabilities    EmployeeLiability[]
 }
 
 // ==========================================
@@ -89,6 +91,8 @@ model Pump {
 
 enum ShiftStatus {
   OPEN
+  CLOSED_PENDING
+  APPROVED
   CLOSED
 }
 
@@ -117,6 +121,14 @@ model Shift {
   cashVariance    Float?      
   bankVariance    Float?      
 
+  // Smart Notes & Audit Trail
+  systemGeneratedNote String?  @db.Text  // Auto-generated Arabic note
+  approvalNote        String?  @db.Text  // Admin's manual note
+  approvedById        String?
+  approvedBy          User?    @relation("ShiftApprover", fields: [approvedById], references: [id])
+  approvedAt          DateTime?
+
+  liabilities   EmployeeLiability[]
   sales           Sale[]
 
   openedAt        DateTime    @default(now())
@@ -292,4 +304,30 @@ model ActivityLog {
   action        String    // e.g., "SALE_PROCESSED", "SYSTEM_RESET"
   details       String?   @db.Text
   createdAt     DateTime  @default(now())
+}
+
+// ==========================================
+// Employee Liability System
+// ==========================================
+enum LiabilityStatus {
+  PENDING
+  SETTLED
+  SALARY_DEDUCTION
+  WAIVED
+  DISPUTED
+  TRANSFERRED
+}
+
+model EmployeeLiability {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id])
+  shiftId     String?
+  shift       Shift?          @relation(fields: [shiftId], references: [id])
+  amount      Float
+  reason      String
+  status      LiabilityStatus @default(PENDING)
+  notes       String?         @db.Text
+  createdAt   DateTime        @default(now())
+  settledAt   DateTime?
 }
