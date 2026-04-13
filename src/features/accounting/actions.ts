@@ -5,6 +5,65 @@ import { revalidatePath } from "next/cache"
 import { auth } from "@/auth"
 import { roundSAR } from "@/lib/financial"
 
+/**
+ * INTERNAL HELPER: Get an account by code, or create it if it doesn't exist.
+ * This ensures system accounts like "Cash", "Bank", "Employee Receivables" etc. are always available.
+ */
+export async function getOrCreateAccount(code: string, name: string, type: "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE", tx?: any) {
+  const p = tx || prisma
+  let account = await p.account.findUnique({ where: { code } })
+  if (!account) {
+    account = await p.account.create({
+      data: { code, name, type }
+    })
+  }
+  return account
+}
+
+/**
+ * INTERNAL HELPER: Create a double-entry journal record between two accounts.
+ */
+export async function createInternalJournalEntry({ 
+  description, 
+  debitAccountCode, 
+  creditAccountCode, 
+  amount,
+  tx 
+}: { 
+  description: string, 
+  debitAccountCode: string, 
+  creditAccountCode: string, 
+  amount: number,
+  tx?: any
+}) {
+  const p = tx || prisma
+  const rounded = roundSAR(amount)
+  
+  // We don't specify names/types here, assuming they are either existing or 
+  // we catch errors if someone tries to use a code that doesn't exist and we didn't pre-seed it.
+  // For safety, we'll use findUnique.
+  const drAcc = await p.account.findUnique({ where: { code: debitAccountCode } })
+  const crAcc = await p.account.findUnique({ where: { code: creditAccountCode } })
+
+  if (!drAcc || !crAcc) {
+    console.error(`Accounting Error: Missing accounts. DR:${debitAccountCode} (${!!drAcc}), CR:${creditAccountCode} (${!!crAcc})`)
+    throw new Error(`Accounting accounts missing: ${!drAcc ? debitAccountCode : ''} ${!crAcc ? creditAccountCode : ''}`)
+  }
+
+  return await p.journalEntry.create({
+    data: {
+      description,
+      transactions: {
+        create: [
+          { accountId: drAcc.id, debit: rounded, credit: 0 },
+          { accountId: crAcc.id, debit: 0, credit: rounded }
+        ]
+      }
+    }
+  })
+}
+
+
 // =============================================
 // 1. Create Ledger Account — with Validation
 // =============================================

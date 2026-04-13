@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/auth"
+import { createInternalJournalEntry, getOrCreateAccount } from "../accounting/actions"
 
 // ==========================================
 // PUMP REGISTRY ACTIONS (Admin/Manager)
@@ -282,6 +283,7 @@ export async function approveShift(formData: FormData) {
   }
 
   await prisma.$transaction(async (tx: any) => {
+    // 1. Update Shift Status
     await tx.shift.update({
       where: { id: shiftId },
       data: {
@@ -292,34 +294,85 @@ export async function approveShift(formData: FormData) {
       }
     })
 
-    // Auto-create liability if there's a cash shortage and not already assigned
     const cashVariance = (shift.actualCash ?? 0) - (shift.expectedCash ?? 0)
+
+    // Ensure system accounts exist
+    await getOrCreateAccount("1001", "Cash", "ASSET", tx)
+    await getOrCreateAccount("1002", "Bank", "ASSET", tx)
+    await getOrCreateAccount("1201", "Employee Receivables", "ASSET", tx)
+    await getOrCreateAccount("5005", "Over/Short Account", "EXPENSE", tx)
+
+    // CASE 1: SHORTAGE (Negative Variance)
     if (cashVariance < 0) {
-      const existingLiability = await tx.employeeLiability.findFirst({
-        where: { shiftId: shift.id }
+      const amount = Math.abs(cashVariance)
+
+      // 1. Record OverShort Difference
+      await tx.overShort.create({
+        data: {
+          shiftId: shift.id,
+          type: "SHORTAGE",
+          amount
+        }
       })
 
-      if (!existingLiability) {
-        await tx.employeeLiability.create({
-          data: {
-            userId: shift.userId,
-            shiftId: shift.id,
-            amount: Math.abs(cashVariance),
-            reason: `نقص نقدي في الوردية على ${shift.pump.name}`,
-            status: "PENDING"
-          }
-        })
-      }
+      // 2. Create Employee Liability (Employee Debt)
+      await tx.employeeLiability.create({
+        data: {
+          userId: shift.userId,
+          shiftId: shift.id,
+          amount,
+          reason: `Auto-assigned shortage: ${shift.pump.name}`,
+          status: "PENDING"
+        }
+      })
+
+      // 3. Accounting Entry: (Debit: Employee Receivables, Credit: Cash)
+      // Reason: The cashier owes the station this amount now.
+      await createInternalJournalEntry({
+        tx,
+        description: `Shift Shortage Assignment - Shift #${shift.id}`,
+        debitAccountCode: "1201",
+        creditAccountCode: "1001",
+        amount
+      })
     }
 
+    // CASE 2: OVERAGE (Positive Variance)
+    else if (cashVariance > 0) {
+      const amount = cashVariance
+
+      // 1. Record OverShort Difference
+      await tx.overShort.create({
+        data: {
+          shiftId: shift.id,
+          type: "OVERAGE",
+          amount
+        }
+      })
+
+      // 2. Accounting Entry: (Debit: Cash, Credit: Over/Short Account)
+      // Reason: We found extra cash, we book it as a temporary revenue/gain.
+      await createInternalJournalEntry({
+        tx,
+        description: `Shift Overage Recorded - Shift #${shift.id}`,
+        debitAccountCode: "1001",
+        creditAccountCode: "5005",
+        amount
+      })
+    }
+
+    // Final Audit Log
     await tx.activityLog.create({
       data: {
         userId: currentUserId,
         action: "SHIFT_APPROVED",
-        details: `Approved shift for ${shift.user.name} on ${shift.pump.name}. Note: ${approvalNote || "تمت المراجعة والاعتماد"}`
+        details: `Approved shift for ${shift.user.name} on ${shift.pump.name}. Variance: ${cashVariance.toFixed(2)}. Accounting entries generated.`
       }
     })
+  }, {
+    timeout: 10000 // Extended timeout for multiple operations
   })
+
 
   revalidatePath("/shifts")
   revalidatePath("/dashboard")

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/auth"
+import { createInternalJournalEntry, getOrCreateAccount } from "../accounting/actions"
 
 // ================================================
 // ASSIGN LIABILITY — manually from AdminApprovalCard
@@ -44,6 +45,11 @@ export async function assignLiability(formData: FormData) {
   const reason = `نقص نقدي في الوردية على ${shift.pump.name} — ${new Date(shift.closedAt ?? shift.openedAt).toLocaleDateString("ar-SA")}`
 
   await prisma.$transaction(async (tx: any) => {
+    // 1. Ensure system accounts exist
+    await getOrCreateAccount("1001", "Cash", "ASSET", tx)
+    await getOrCreateAccount("1201", "Employee Receivables", "ASSET", tx)
+
+    // 2. Create the Liability Record
     await tx.employeeLiability.create({
       data: {
         userId: shift.userId,
@@ -54,14 +60,34 @@ export async function assignLiability(formData: FormData) {
       }
     })
 
+    // 3. Create OverShort Record for audit
+    await tx.overShort.create({
+      data: {
+        shiftId: shift.id,
+        type: "SHORTAGE",
+        amount: shortageAmount
+      }
+    })
+
+    // 4. Accounting Entry: (Debit: Employee Receivables, Credit: Cash)
+    await createInternalJournalEntry({
+      tx,
+      description: `Manual Shortage Assignment - Shift #${shift.id}`,
+      debitAccountCode: "1201",
+      creditAccountCode: "1001",
+      amount: shortageAmount
+    })
+
+    // 5. Audit Log
     await tx.activityLog.create({
       data: {
         userId: (session as any).user.id,
         action: "LIABILITY_ASSIGNED",
-        details: `Assigned liability of SAR ${shortageAmount.toFixed(2)} to ${shift.user.name} for shift on ${shift.pump.name}.`
+        details: `Assigned manual liability of SAR ${shortageAmount.toFixed(2)} to ${shift.user.name}. Accounting handled.`
       }
     })
-  })
+  }, { timeout: 10000 })
+
 
   revalidatePath("/shifts")
   revalidatePath("/liabilities")
@@ -95,6 +121,7 @@ export async function updateLiabilityStatus(formData: FormData) {
   if (liability.status !== "PENDING") return { error: "تم اتخاذ إجراء على هذا الالتزام مسبقاً." }
 
   await prisma.$transaction(async (tx: any) => {
+    // 1. Update the Liability Record
     await tx.employeeLiability.update({
       where: { id: liabilityId },
       data: {
@@ -104,14 +131,56 @@ export async function updateLiabilityStatus(formData: FormData) {
       }
     })
 
+    // 2. Ensure system accounts exist
+    await getOrCreateAccount("1001", "Cash", "ASSET", tx)
+    await getOrCreateAccount("1201", "Employee Receivables", "ASSET", tx)
+    await getOrCreateAccount("5005", "Over/Short Account", "EXPENSE", tx)
+    await getOrCreateAccount("6001", "Salary Expense", "EXPENSE", tx)
+
+    // 3. Automated Accounting Entry based on STATUS
+    let description = `Liability Resolution (${newStatus}) - ${liability.user.name}`
+    
+    if (newStatus === "SETTLED") {
+      // Cash Payment: (Debit: Cash, Credit: Employee Receivables)
+      await createInternalJournalEntry({
+        tx,
+        description: `Cash Settlement: ${description}`,
+        debitAccountCode: "1001",
+        creditAccountCode: "1201",
+        amount: liability.amount
+      })
+    } 
+    else if (newStatus === "SALARY_DEDUCTION") {
+      // Salary Deduction: (Debit: Salary Expense, Credit: Employee Receivables)
+      await createInternalJournalEntry({
+        tx,
+        description: `Salary Deduction: ${description}`,
+        debitAccountCode: "6001",
+        creditAccountCode: "1201",
+        amount: liability.amount
+      })
+    }
+    else if (newStatus === "WAIVED") {
+      // Waiver/Write-off: (Debit: Over/Short Account, Credit: Employee Receivables)
+      await createInternalJournalEntry({
+        tx,
+        description: `Liability Waiver: ${description}`,
+        debitAccountCode: "5005",
+        creditAccountCode: "1201",
+        amount: liability.amount
+      })
+    }
+
+    // 4. Audit Log
     await tx.activityLog.create({
       data: {
         userId: (session as any).user.id,
         action: "LIABILITY_UPDATED",
-        details: `Updated liability status to ${newStatus} for ${liability.user.name}. ${notes ? `Notes: ${notes}` : ""}`
+        details: `Updated liability status to ${newStatus} for ${liability.user.name}. Accounting handled. Info: ${notes || "None"}`
       }
     })
-  })
+  }, { timeout: 10000 })
+
 
   revalidatePath("/liabilities")
   revalidatePath("/shifts")

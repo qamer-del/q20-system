@@ -568,6 +568,17 @@ export function ApprovedShiftCard({ shift, dict }: { shift: any, dict: any }) {
             <p className="text-sm font-bold text-emerald-800 dark:text-emerald-200">{shift.approvalNote}</p>
           </div>
         )}
+
+        {/* Accounting Visibility */}
+        {(shift.overShorts?.length > 0) && (
+          <div dir="rtl" className="mt-3 flex gap-2">
+            {shift.overShorts.map((os: any) => (
+              <span key={os.id} className={`text-[9px] font-black uppercase px-3 py-1 rounded-full border ${os.type === 'SHORTAGE' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
+                {os.type === 'SHORTAGE' ? '🔻 تم تسجيل عجز مالي' : '🔺 تم تسجيل زيادة مالية'}
+              </span>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

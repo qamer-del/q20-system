@@ -129,6 +129,7 @@ model Shift {
   approvedAt          DateTime?
 
   liabilities   EmployeeLiability[]
+  overShorts    OverShort[]
   sales           Sale[]
 
   openedAt        DateTime    @default(now())
@@ -331,3 +332,21 @@ model EmployeeLiability {
   createdAt   DateTime        @default(now())
   settledAt   DateTime?
 }
+
+// ==========================================
+// Over/Short Financial Tracking
+// ==========================================
+enum OverShortType {
+  OVERAGE
+  SHORTAGE
+}
+
+model OverShort {
+  id        String        @id @default(cuid())
+  shiftId   String
+  shift     Shift         @relation(fields: [shiftId], references: [id])
+  type      OverShortType
+  amount    Float
+  createdAt DateTime      @default(now())
+}
+

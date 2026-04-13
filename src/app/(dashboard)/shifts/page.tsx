@@ -73,7 +73,8 @@ export default async function ShiftsPage() {
       user: true,
       sales: true,
       approvedBy: true,
-      liabilities: true
+      liabilities: true,
+      overShorts: true
     },
     orderBy: { closedAt: "desc" },
     take: 20
@@ -244,6 +245,17 @@ export default async function ShiftsPage() {
                                 {cVar === 0 ? t.balanced : `${cVar > 0 ? '+' : ''}${cVar.toLocaleString()}`}
                               </span>
                             </div>
+                            {/* Financial Note */}
+                            {cVar < 0 && (
+                              <p className="text-[9px] font-black text-rose-600 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-md inline-block">
+                                🔴 {t.shortage_assigned || "تم تحميل العجز للموظف"}
+                              </p>
+                            )}
+                            {cVar > 0 && (
+                              <p className="text-[9px] font-black text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-md inline-block">
+                                🟡 {t.overage_recorded || "تم تسجيل الزيادة للمراجعة"}
+                              </p>
+                            )}
                           </div>
                         </td>
                         <td className="p-6 min-w-[160px]">
