@@ -116,6 +116,7 @@ export interface AccountBalance {
   type: string
   balance: number
   code: string
+  zakatType?: string | null
 }
 
 /**
@@ -126,9 +127,9 @@ export function calculateZakat(
   accounts: AccountBalance[],
   calendarType: 'hijri' | 'gregorian' = 'gregorian'
 ): ZakatBreakdown {
-  // Categorize accounts
-  const assetAccounts = accounts.filter(a => a.type === 'ASSET')
-  const liabilityAccounts = accounts.filter(a => a.type === 'LIABILITY')
+  // Use explicit Zakat classifications if present, else fallback
+  const assetAccounts = accounts.filter(a => a.zakatType === "CURRENT" || (!a.zakatType && a.type === 'ASSET'))
+  const liabilityAccounts = accounts.filter(a => a.zakatType === "LIABILITY" || (!a.zakatType && a.type === 'LIABILITY'))
   const equityAccounts = accounts.filter(a => a.type === 'EQUITY')
   const revenueAccounts = accounts.filter(a => a.type === 'REVENUE')
   const expenseAccounts = accounts.filter(a => a.type === 'EXPENSE')
@@ -141,9 +142,7 @@ export function calculateZakat(
   const totalExpense = roundSAR(expenseAccounts.reduce((s, a) => s + a.balance, 0))
   const netIncome = roundSAR(totalRevenue - totalExpense)
 
-  // ZATCA Zakatable Base (Simplified Method)
-  // Sources: Equity + Net Income + Current Liabilities (representing funds used)
-  // Deductions: None (no fixed assets in system)
+  // ZATCA Zakatable Base
   // Simplified: Current Assets - Current Liabilities (net current assets)
   const zakatBase = roundSAR(Math.max(0, currentAssets - currentLiabilities))
 

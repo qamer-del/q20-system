@@ -9,7 +9,8 @@ import {
   extractVatFromInclusive,
   generateInvoiceNumber,
 } from "@/lib/financial"
-import { generateZatcaTlvBase64 } from "@/features/zatca/engine"
+import { generateZatcaTlvBase64, generateZatcaUblXml } from "@/features/zatca/engine"
+import crypto from "crypto"
 
 // =============================================
 // Centralized Account Seeding (called once per tx)
@@ -17,9 +18,11 @@ import { generateZatcaTlvBase64 } from "@/features/zatca/engine"
 async function getOrSeedAccounts(tx: any) {
   const cash = await tx.account.upsert({ where: { code: "1001" }, update: {}, create: { code: "1001", name: "Cash on Hand", type: "ASSET" } })
   const bank = await tx.account.upsert({ where: { code: "1002" }, update: {}, create: { code: "1002", name: "Bank Account", type: "ASSET" } })
+  const inventory = await tx.account.upsert({ where: { code: "1003" }, update: {}, create: { code: "1003", name: "Raw Fuel Inventory", type: "ASSET" } })
   const sales = await tx.account.upsert({ where: { code: "4001" }, update: {}, create: { code: "4001", name: "Sales Revenue", type: "REVENUE" } })
+  const cogs = await tx.account.upsert({ where: { code: "5001" }, update: {}, create: { code: "5001", name: "Cost of Goods Sold (COGS)", type: "EXPENSE" } })
   const vatPayable = await tx.account.upsert({ where: { code: "2001" }, update: {}, create: { code: "2001", name: "VAT Payable (ZATCA 15%)", type: "LIABILITY" } })
-  return { cash, bank, sales, vatPayable }
+  return { cash, bank, inventory, sales, cogs, vatPayable }
 }
 
 // =============================================
@@ -78,14 +81,31 @@ export async function processSale(formData: FormData) {
     const accounts = await getOrSeedAccounts(tx)
     const debitAccount = paymentMethod === "CASH" ? accounts.cash : accounts.bank
 
+    // Calculate COGS based on latest purchase price (LIFO approximation of WAC)
+    const latestPurchase = await tx.purchase.findFirst({
+      where: { fuelTypeId: tank.fuelTypeId },
+      orderBy: { createdAt: 'desc' }
+    })
+    const costPerLiter = latestPurchase ? latestPurchase.unitPrice : (unitPrice * 0.85) // Fallback 15% margin
+    // The COGS value must be extracted of VAT to compare against net revenue? No, purchases are recorded with net amount to inventory.
+    // However, the unitPrice in purchase might be gross. Wait, in purchase we use `netAmount = extractVat(quantity * unitPrice)`. 
+    // This means inventory is valued at net amount! So cost per liter should be net.
+    const netCostPerLiter = latestPurchase ? extractVatFromInclusive(costPerLiter).netAmount : extractVatFromInclusive(unitPrice * 0.85).netAmount
+    const totalCogsAmount = roundSAR(multiply(quantity, netCostPerLiter))
+
     const journal = await tx.journalEntry.create({
       data: {
         description: `POS Sale: ${quantity}L of ${tank.fuelType.name} via ${paymentMethod}`,
         transactions: {
           create: [
+            // Revenue Recognition
             { accountId: debitAccount.id, debit: totalAmount, credit: 0 },
             { accountId: accounts.sales.id, debit: 0, credit: netAmount },
-            { accountId: accounts.vatPayable.id, debit: 0, credit: vatAmount }
+            { accountId: accounts.vatPayable.id, debit: 0, credit: vatAmount },
+            
+            // COGS / Inventory Depletion Principle
+            { accountId: accounts.cogs.id, debit: totalCogsAmount, credit: 0 },
+            { accountId: accounts.inventory.id, debit: 0, credit: totalCogsAmount }
           ]
         }
       }
@@ -100,10 +120,28 @@ export async function processSale(formData: FormData) {
       vatAmount.toFixed(2)
     )
 
-    // 2f. Create Sale Record (Split to avoid nested write bugs in Prisma Pg driver adapter)
+    // === ZATCA PHASE 2 UBL XML GENERATOR ===
+    const invoiceNumber = generateInvoiceNumber("INV")
+    const d = new Date()
+    const uuid = crypto.randomUUID()
+    
+    const zatcaXml = generateZatcaUblXml({
+      uuid,
+      invoiceNumber,
+      issueDate: d.toISOString().split('T')[0],
+      issueTime: d.toISOString().split('T')[1].split('.')[0] + 'Z',
+      totalAmount,
+      netAmount,
+      vatAmount,
+      fuelName: tank.fuelType.name,
+      quantity,
+      unitPrice
+    })
+
+    // 2f. Create Sale Record
     const sale = await tx.sale.create({
       data: {
-        invoiceNumber: generateInvoiceNumber("INV"),
+        invoiceNumber,
         totalAmount,
         netAmount,
         vatAmount,
@@ -114,6 +152,7 @@ export async function processSale(formData: FormData) {
         shiftId,
         zatcaQrCode,
         zatcaHash: "PENDING-CLEARANCE",
+        zatcaXml,
         journalEntryId: journal.id
       }
     })

@@ -166,6 +166,7 @@ model Sale {
   // ZATCA specific fields (Phase 2)
   zatcaQrCode   String?   @db.Text
   zatcaHash     String?
+  zatcaXml      String?   @db.Text
 
   // Accounting Link - A sale maps exactly to ONE journal entry
   journalEntryId String?  @unique
@@ -242,6 +243,9 @@ model Account {
   parentAccountId String?
   parentAccount   Account?  @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
   childAccounts   Account[] @relation("AccountHierarchy")
+  
+  // Zakat Categorization (CURRENT | FIXED | LIABILITY)
+  zakatType       String?
 
   transactions  LedgerTransaction[]
 
@@ -271,10 +275,29 @@ model LedgerTransaction {
   accountId       String
   account         Account     @relation(fields: [accountId], references: [id])
 
-  debit           Float       @default(0) // Left side of ledger
-  credit          Float       @default(0) // Right side of ledger
+  debit           Decimal     @default(0) @db.Decimal(12, 2) // Left side of ledger
+  credit          Decimal     @default(0) @db.Decimal(12, 2) // Right side of ledger
 
   createdAt       DateTime    @default(now())
+}
+
+// ==========================================
+// Accounts Payable & Monthly Closing (Enterprise)
+// ==========================================
+model SupplierInvoice {
+  id        String   @id @default(cuid())
+  supplier  String
+  amount    Decimal  @db.Decimal(12,2)
+  status    String   @default("PENDING") // PENDING | PAID
+  createdAt DateTime @default(now())
+}
+
+model MonthlySummary {
+  id        String   @id @default(cuid())
+  month     String   // e.g., "2026-04"
+  revenue   Decimal  @db.Decimal(12,2)
+  expenses  Decimal  @db.Decimal(12,2)
+  createdAt DateTime @default(now())
 }
 
 // ==========================================

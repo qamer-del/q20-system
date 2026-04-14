@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import ActionForm from "@/components/ActionForm"
 import SubmitButton from "@/components/SubmitButton"
 import { calculateBalance, roundSAR } from "@/lib/financial"
+import JournalEntryCard from "./JournalEntryCard"
 
 async function getTranslation() {
   const cookieStore = await cookies()
@@ -19,7 +20,7 @@ async function getTranslation() {
 }
 
 export default async function AccountingPage() {
-  await protectRoute(["ADMIN", "MANAGER"])
+  await protectRoute(["ADMIN"])
   const dict = await getTranslation()
   const accountsData = await prisma.account.findMany({
     include: { transactions: true, childAccounts: { include: { transactions: true } } },
@@ -27,14 +28,14 @@ export default async function AccountingPage() {
   })
 
   const topLevelAccounts = accountsData.filter((a: any) => !a.parentAccountId).map((account: any) => {
-    let totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
-    let totalCredit = account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
+    let totalDebit = account.transactions.reduce((sum: number, t: any) => sum + Number(t.debit), 0)
+    let totalCredit = account.transactions.reduce((sum: number, t: any) => sum + Number(t.credit), 0)
 
     let children = []
     if (account.childAccounts && account.childAccounts.length > 0) {
       children = account.childAccounts.map((child: any) => {
-        const cDebit = child.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
-        const cCredit = child.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
+        const cDebit = child.transactions.reduce((sum: number, t: any) => sum + Number(t.debit), 0)
+        const cCredit = child.transactions.reduce((sum: number, t: any) => sum + Number(t.credit), 0)
         totalDebit += cDebit
         totalCredit += cCredit
         return { ...child, totalDebit: roundSAR(cDebit), totalCredit: roundSAR(cCredit), balance: calculateBalance(child.type, roundSAR(cDebit), roundSAR(cCredit)) }
@@ -47,11 +48,21 @@ export default async function AccountingPage() {
     return { ...account, totalDebit, totalCredit, balance, children }
   })
 
-  const recentJournals = await prisma.journalEntry.findMany({
+  const recentJournalsRaw = await prisma.journalEntry.findMany({
     take: 15,
     orderBy: { date: 'desc' },
     include: { transactions: { include: { account: true } } }
   })
+
+  // Sanitize Decimal objects to plain numbers for the Client Component
+  const recentJournals = recentJournalsRaw.map((j: any) => ({
+    ...j,
+    transactions: j.transactions.map((t: any) => ({
+      ...t,
+      debit: Number(t.debit),
+      credit: Number(t.credit)
+    }))
+  }))
 
   // Calculate trial balance totals using only top-level aggregated amounts
   const trialDebit = roundSAR(topLevelAccounts.reduce((s: number, a: any) => s + a.totalDebit, 0))
@@ -234,42 +245,9 @@ export default async function AccountingPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentJournals.map((journal: any) => {
-                // Verify each JE balances
-                const jeDebit = roundSAR(journal.transactions.reduce((s: number, t: any) => s + t.debit, 0))
-                const jeCredit = roundSAR(journal.transactions.reduce((s: number, t: any) => s + t.credit, 0))
-                const jeBalanced = jeDebit === jeCredit
-
-                return (
-                  <div key={journal.id} className={`border rounded-2xl p-6 hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors shadow-sm ${jeBalanced ? 'border-slate-200 dark:border-slate-800' : 'border-rose-300 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-900/10'}`}>
-                    <div className="flex justify-between items-center mb-4 border-b border-dashed border-slate-200 dark:border-slate-700 pb-3">
-                      <div className="flex items-center gap-3">
-                        <span className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-wider">{journal.description}</span>
-                        {!jeBalanced && <span className="text-[10px] bg-rose-100 text-rose-600 px-2 py-1 rounded font-bold uppercase">{(dict.Accounting as any).unbalanced}</span>}
-                      </div>
-                      <span className="text-[10px] text-slate-400 font-mono tracking-widest font-bold bg-slate-100 dark:bg-slate-900 px-3 py-1 rounded-md">{new Date(journal.date).toLocaleString()}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {journal.transactions.map((t: any, i: number) => (
-                        <div key={i} className="flex justify-between text-sm font-mono tracking-wider items-center p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900">
-                          <span className={`${t.credit > 0 ? "ml-12 text-rose-600 dark:text-rose-400" : "font-bold text-emerald-600 dark:text-emerald-400"} flex items-center gap-2`}>
-                            <span className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 rounded">{t.account.code}</span>
-                            {t.account.name}
-                          </span>
-                          <div className="w-64 flex justify-between bg-white dark:bg-slate-950 px-4 py-2 rounded-md border border-slate-100 dark:border-slate-800 shadow-inner">
-                            <span className={t.debit > 0 ? "text-slate-900 dark:text-white font-black" : "text-slate-300 dark:text-slate-700"}>
-                              {t.debit > 0 ? t.debit.toFixed(2) : ""}
-                            </span>
-                            <span className={t.credit > 0 ? "text-slate-900 dark:text-white font-black" : "text-slate-300 dark:text-slate-700"}>
-                              {t.credit > 0 ? t.credit.toFixed(2) : ""}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
+              {recentJournals.map((journal: any) => (
+                <JournalEntryCard key={journal.id} journal={journal} dict={dict} />
+              ))}
               {recentJournals.length === 0 && <p className="text-center text-slate-400 py-12">{(dict.Accounting as any).no_ledgers}</p>}
             </div>
           </CardContent>

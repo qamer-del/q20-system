@@ -295,6 +295,7 @@ export async function approveShift(formData: FormData) {
     })
 
     const cashVariance = (shift.actualCash ?? 0) - (shift.expectedCash ?? 0)
+    const bankVariance = (shift.actualBank ?? 0) - (shift.expectedBank ?? 0)
 
     // Ensure system accounts exist
     await getOrCreateAccount("1001", "Cash", "ASSET", tx)
@@ -302,71 +303,72 @@ export async function approveShift(formData: FormData) {
     await getOrCreateAccount("1201", "Employee Receivables", "ASSET", tx)
     await getOrCreateAccount("5005", "Over/Short Account", "EXPENSE", tx)
 
-    // CASE 1: SHORTAGE (Negative Variance)
-    if (cashVariance < 0) {
-      const amount = Math.abs(cashVariance)
+    // HELPER: Process Variance for an Account
+    const processVariance = async (variance: number, isBank: boolean) => {
+      if (variance === 0) return
 
-      // 1. Record OverShort Difference
-      await tx.overShort.create({
-        data: {
-          shiftId: shift.id,
-          type: "SHORTAGE",
+      const accountName = isBank ? "Bank" : "Cash"
+      const accountCode = isBank ? "1002" : "1001"
+      const amount = Math.abs(variance)
+
+      if (variance < 0) {
+        // SHORTAGE
+        await tx.overShort.create({
+          data: {
+            shiftId: shift.id,
+            type: "SHORTAGE",
+            amount
+          }
+        })
+
+        await tx.employeeLiability.create({
+          data: {
+            userId: shift.userId,
+            shiftId: shift.id,
+            amount,
+            reason: `Auto-assigned ${accountName} shortage: ${shift.pump.name}`,
+            status: "PENDING"
+          }
+        })
+
+        await createInternalJournalEntry({
+          tx,
+          description: `Shift ${accountName} Shortage Assignment - #` + shift.id,
+          debitAccountCode: "1201", // Employee Receivables
+          creditAccountCode: accountCode,
           amount
-        }
-      })
+        })
+      } else {
+        // OVERAGE
+        await tx.overShort.create({
+          data: {
+            shiftId: shift.id,
+            type: "OVERAGE",
+            amount
+          }
+        })
 
-      // 2. Create Employee Liability (Employee Debt)
-      await tx.employeeLiability.create({
-        data: {
-          userId: shift.userId,
-          shiftId: shift.id,
-          amount,
-          reason: `Auto-assigned shortage: ${shift.pump.name}`,
-          status: "PENDING"
-        }
-      })
-
-      // 3. Accounting Entry: (Debit: Employee Receivables, Credit: Cash)
-      // Reason: The cashier owes the station this amount now.
-      await createInternalJournalEntry({
-        tx,
-        description: `Shift Shortage Assignment - Shift #${shift.id}`,
-        debitAccountCode: "1201",
-        creditAccountCode: "1001",
-        amount
-      })
+        await createInternalJournalEntry({
+          tx,
+          description: `Shift ${accountName} Overage Recorded - #` + shift.id,
+          debitAccountCode: accountCode,
+          creditAccountCode: "5005", // Over/Short
+          amount
+        })
+      }
     }
 
-    // CASE 2: OVERAGE (Positive Variance)
-    else if (cashVariance > 0) {
-      const amount = cashVariance
+    await processVariance(cashVariance, false)
+    await processVariance(bankVariance, true)
 
-      // 1. Record OverShort Difference
-      await tx.overShort.create({
-        data: {
-          shiftId: shift.id,
-          type: "OVERAGE",
-          amount
-        }
-      })
-
-      // 2. Accounting Entry: (Debit: Cash, Credit: Over/Short Account)
-      // Reason: We found extra cash, we book it as a temporary revenue/gain.
-      await createInternalJournalEntry({
-        tx,
-        description: `Shift Overage Recorded - Shift #${shift.id}`,
-        debitAccountCode: "1001",
-        creditAccountCode: "5005",
-        amount
-      })
-    }
+    const totalNetVariance = cashVariance + bankVariance
 
     // Final Audit Log
     await tx.activityLog.create({
       data: {
         userId: currentUserId,
         action: "SHIFT_APPROVED",
-        details: `Approved shift for ${shift.user.name} on ${shift.pump.name}. Variance: ${cashVariance.toFixed(2)}. Accounting entries generated.`
+        details: `Approved shift for ${shift.user.name} on ${shift.pump.name}. Cash Var: ${cashVariance.toFixed(2)}, Bank Var: ${bankVariance.toFixed(2)}. Net: ${totalNetVariance.toFixed(2)}. Accounting entries generated.`
       }
     })
   }, {

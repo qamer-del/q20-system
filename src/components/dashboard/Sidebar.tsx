@@ -14,7 +14,8 @@ import {
   Users,
   LogOut,
   Settings,
-  Clock
+  Clock,
+  Activity
 } from "lucide-react"
 import SettingsToggle from "@/components/SettingsToggle"
 import { useI18n } from "@/components/I18nProvider"
@@ -33,6 +34,7 @@ export default function Sidebar({ mobile, role = "CASHIER" }: { mobile?: boolean
   const allLinks = [
     { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
     { name: "Shift Control", href: "/shifts", icon: Clock },
+    { name: "Operations & IoT", href: "/operations", icon: Activity },
     { name: "Point of Sale", href: "/pos", icon: MonitorPlay },
     { name: "Fuel Inventory", href: "/inventory", icon: Droplets },
     { name: "Supplier Refills", href: "/purchases", icon: Truck },
@@ -47,7 +49,8 @@ export default function Sidebar({ mobile, role = "CASHIER" }: { mobile?: boolean
 
   const links = role === "CASHIER" ? cashierLinks : allLinks.filter(link => {
     if (role === "ADMIN") return true;
-    if (role === "MANAGER") return ["/dashboard", "/shifts", "/inventory", "/accounting", "/liabilities", "/reporting", "/purchases"].includes(link.href);
+    // Managers can see operational stuff, but true accounting ledger and security logs are blocked.
+    if (role === "MANAGER") return ["/dashboard", "/shifts", "/operations", "/inventory", "/liabilities", "/purchases"].includes(link.href);
     return ["/dashboard"].includes(link.href);
   })
 

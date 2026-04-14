@@ -84,8 +84,8 @@ export default async function DashboardPage() {
 
   const accountsData = await prisma.account.findMany({ include: { transactions: true } })
   const accounts = accountsData.map((account: any) => {
-    const totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
-    const totalCredit = account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
+    const totalDebit = account.transactions.reduce((sum: number, t: any) => sum + Number(t.debit || 0), 0)
+    const totalCredit = account.transactions.reduce((sum: number, t: any) => sum + Number(t.credit || 0), 0)
     const balance = calculateBalance(account.type, totalDebit, totalCredit)
     return { ...account, balance, code: account.code, type: account.type, parentAccountId: account.parentAccountId }
   })

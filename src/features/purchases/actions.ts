@@ -11,9 +11,9 @@ import { roundSAR, multiply, extractVatFromInclusive } from "@/lib/financial"
 async function getOrSeedPurchaseAccounts(tx: any) {
   const cash = await tx.account.upsert({ where: { code: "1001" }, update: {}, create: { code: "1001", name: "Cash on Hand", type: "ASSET" } })
   const bank = await tx.account.upsert({ where: { code: "1002" }, update: {}, create: { code: "1002", name: "Bank Account", type: "ASSET" } })
-  const cogs = await tx.account.upsert({ where: { code: "5001" }, update: {}, create: { code: "5001", name: "Cost of Fuel Purchased", type: "EXPENSE" } })
+  const inventory = await tx.account.upsert({ where: { code: "1003" }, update: {}, create: { code: "1003", name: "Raw Fuel Inventory", type: "ASSET" } })
   const vatInput = await tx.account.upsert({ where: { code: "1004" }, update: {}, create: { code: "1004", name: "VAT Input Tax (Receivable)", type: "ASSET" } })
-  return { cash, bank, cogs, vatInput }
+  return { cash, bank, inventory, vatInput }
 }
 
 // =============================================
@@ -129,8 +129,8 @@ export async function processRefillPurchase(formData: FormData) {
         description: `Supplier Refill: ${quantity}L for ${tank.name} (Inv: ${invoiceNumber})`,
         transactions: {
           create: [
-            // Debit: Cost of Goods (Expense) — net amount
-            { accountId: accounts.cogs.id, debit: netAmount, credit: 0 },
+            // Debit: Fuel Inventory (Asset) — net amount (capitalization)
+            { accountId: accounts.inventory.id, debit: netAmount, credit: 0 },
             // Debit: VAT Input (Asset) — we claim this back from ZATCA
             { accountId: accounts.vatInput.id, debit: vatAmount, credit: 0 },
             // Credit: Cash or Bank decreased — we paid the supplier

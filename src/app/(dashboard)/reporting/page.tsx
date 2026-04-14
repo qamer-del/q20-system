@@ -5,7 +5,7 @@ import { cookies } from "next/headers"
 import enDict from "../../../../messages/en.json"
 import arDict from "../../../../messages/ar.json"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { PrintButton } from "./PrintButton"
+import ExportMenu from "./ExportMenu"
 import { calculateBalance, calculateZakat, roundSAR } from "@/lib/financial"
 
 async function getTranslation() {
@@ -15,7 +15,7 @@ async function getTranslation() {
 }
 
 export default async function ReportingPage() {
-  await protectRoute(["ADMIN", "MANAGER"])
+  await protectRoute(["ADMIN"])
   const dict = await getTranslation()
   const accountsData = await prisma.account.findMany({
     include: { transactions: true }
@@ -32,8 +32,8 @@ export default async function ReportingPage() {
 
   // Calculate all account balances using precision helpers
   const accounts = accountsData.map((account: any) => {
-    const totalDebit = account.transactions.reduce((sum: number, t: any) => sum + t.debit, 0)
-    const totalCredit = account.transactions.reduce((sum: number, t: any) => sum + t.credit, 0)
+    const totalDebit = account.transactions.reduce((sum: number, t: any) => sum + Number(t.debit || 0), 0)
+    const totalCredit = account.transactions.reduce((sum: number, t: any) => sum + Number(t.credit || 0), 0)
     const balance = calculateBalance(account.type, totalDebit, totalCredit)
     return { ...account, totalDebit, totalCredit, balance }
   })
@@ -81,7 +81,28 @@ export default async function ReportingPage() {
             </div>
             {(dict.Reporting as any).title}
           </h1>
-          <PrintButton />
+          <ExportMenu 
+            financialData={{
+              stationName: "Q20 Fuel Station",
+              dateGenerated: new Date().toLocaleString(),
+              revenues: revenues.map((a: any) => ({ name: a.name, code: a.code, balance: a.balance })),
+              expenses: expenses.map((a: any) => ({ name: a.name, code: a.code, balance: a.balance })),
+              totalRevenue,
+              totalExpense,
+              netIncome,
+              assets: assets.map((a: any) => ({ name: a.name, code: a.code, balance: a.balance })),
+              liabilities: liabilities.map((a: any) => ({ name: a.name, code: a.code, balance: a.balance })),
+              equities: equities.map((a: any) => ({ name: a.name, code: a.code, balance: a.balance })),
+              totalAssets,
+              totalLiabilities,
+              totalEquityWithRetained,
+              vatPayable: vatPayableBalance,
+              vatReceivable: vatReceivableBalance,
+              netVatOwed,
+              zakatData,
+              isLedgerBalanced: roundSAR(totalAssets) === roundSAR(totalLiabilities + totalEquityWithRetained)
+            }}
+          />
         </div>
 
         {/* --- OPERATIONAL & SALES ANALYTICS --- */}
